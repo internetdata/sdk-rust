@@ -29,7 +29,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let databases = client.list().await.expect("list");
+    let databases = client.database().list().await.expect("list");
 
     assert_eq!(databases.len(), 1);
     let family = &databases[0];
@@ -57,7 +57,7 @@ async fn checksums_returns_the_whole_digest_set_from_under_its_key() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let sums = client.checksums("bogon_ip_v1", Format::Mmdb).await.expect("checksums");
+    let sums = client.database().checksums("bogon_ip_v1", Format::Mmdb).await.expect("checksums");
 
     assert_eq!(sums.md5, "m");
     assert_eq!(sums.sha1, "s1");
@@ -81,7 +81,7 @@ async fn metadata_carries_the_sizes_a_transfer_is_budgeted_against() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let meta = client.metadata("bogon_ip_v1").await.expect("metadata");
+    let meta = client.database().metadata("bogon_ip_v1").await.expect("metadata");
 
     assert_eq!(meta.id, "bogon_ip_v1");
     assert_eq!(meta.entries, 1234);
@@ -104,7 +104,7 @@ async fn a_metadata_document_without_its_optional_fields_still_decodes() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let meta = client.metadata("bogon_asn_v1").await.expect("metadata");
+    let meta = client.database().metadata("bogon_asn_v1").await.expect("metadata");
 
     assert_eq!(meta.update_freq, None);
     assert_eq!(meta.sample, None);
@@ -123,7 +123,7 @@ async fn the_download_history_decodes_a_refusal_as_well_as_a_success() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let attempts = client.downloads(Some(2)).await.expect("downloads");
+    let attempts = client.database().downloads(Some(2)).await.expect("downloads");
 
     assert_eq!(attempts.len(), 2);
     assert_eq!(attempts[0].outcome, Outcome::Ok);
@@ -142,7 +142,7 @@ async fn no_limit_sends_no_limit() {
     let stub = Stub::start([(DOWNLOADS.to_owned(), Route::ok(r#"{"downloads":[]}"#))]).await;
     let client = stub.client().build().expect("build");
 
-    client.downloads(None).await.expect("downloads");
+    client.database().downloads(None).await.expect("downloads");
 
     let target = stub.target(DOWNLOADS).expect("the downloads endpoint was never asked");
     assert!(!target.contains("limit"), "{target}");
@@ -159,7 +159,8 @@ async fn download_url_returns_the_redirect_rather_than_following_it() {
     stub.route("/huge.mmdb", Route::ok("").promising(8 * 1024 * 1024 * 1024));
     let client = stub.client().build().expect("build");
 
-    let url = client.download_url("bogon_ip_v1", Format::Mmdb).await.expect("download_url");
+    let url =
+        client.database().download_url("bogon_ip_v1", Format::Mmdb).await.expect("download_url");
 
     assert_eq!(url, location);
     assert_eq!(stub.calls(), vec![DOWNLOAD], "the redirect must not be followed");
@@ -174,7 +175,8 @@ async fn the_returned_link_carries_no_credential_of_ours() {
     stub.route(DOWNLOAD, Route::json(302, "").header("Location", &location));
     let client = stub.client().build().expect("build");
 
-    let url = client.download_url("bogon_ip_v1", Format::Csvgz).await.expect("download_url");
+    let url =
+        client.database().download_url("bogon_ip_v1", Format::Csvgz).await.expect("download_url");
 
     assert!(!url.contains(KEY), "the API key came back inside the presigned link");
 }
@@ -191,6 +193,7 @@ async fn a_redirect_following_http_client_is_refused_not_obeyed() {
     let client = stub.client().http_client(reqwest::Client::new()).build().expect("build");
 
     let err = client
+        .database()
         .download_url("bogon_ip_v1", Format::Mmdb)
         .await
         .expect_err("a followed redirect has no Location left to return");
@@ -207,7 +210,7 @@ async fn an_unknown_database_is_not_retried() {
         Stub::start([(METADATA.to_owned(), Route::json(404, r#"{"rc":"UNKNOWN_DATASET"}"#))]).await;
     let client = stub.client().retries(3).build().expect("build");
 
-    let err = client.metadata("no_such_database").await.expect_err("404");
+    let err = client.database().metadata("no_such_database").await.expect_err("404");
 
     assert_eq!(err.kind(), ErrorKind::BadRequest);
     assert!(!err.retryable());
@@ -223,7 +226,7 @@ async fn a_spent_quota_is_never_retried() {
         Stub::start([(LIST.to_owned(), Route::json(429, r#"{"rc":"QUOTA_EXCEEDED"}"#))]).await;
     let client = stub.client().retries(5).build().expect("build");
 
-    let err = client.list().await.expect_err("a 429 should fail");
+    let err = client.database().list().await.expect_err("a 429 should fail");
 
     assert_eq!(err.kind(), ErrorKind::QuotaExceeded);
     assert_eq!(stub.count(), 1);
@@ -239,7 +242,7 @@ async fn a_rate_limit_is_retried_after_the_server_supplied_wait() {
     let client = stub.client().retries(1).build().expect("build");
 
     let start = Instant::now();
-    client.list().await.expect_err("the call should still have failed");
+    client.database().list().await.expect_err("the call should still have failed");
 
     assert_eq!(stub.count(), 2);
     // The header, not the backoff schedule, decides the wait.
@@ -251,7 +254,7 @@ async fn a_server_fault_is_retried_up_to_the_configured_budget() {
     let stub = Stub::start([(LIST.to_owned(), Route::json(503, r#"{"rc":"UNAVAILABLE"}"#))]).await;
     let client = stub.client().retries(2).build().expect("build");
 
-    let err = client.list().await.expect_err("a 503 should fail");
+    let err = client.database().list().await.expect_err("a 503 should fail");
 
     assert!(err.retryable());
     // One initial attempt plus two retries.
@@ -266,7 +269,7 @@ async fn the_key_travels_as_a_bearer_token_and_not_in_the_query_string() {
     let stub = Stub::start([(LIST.to_owned(), Route::ok(r#"{"databases":[]}"#))]).await;
     let client = stub.client().build().expect("build");
 
-    client.list().await.expect("list");
+    client.database().list().await.expect("list");
 
     let call = &stub.requests()[0];
     assert_eq!(call.header("authorization"), Some(format!("Bearer {KEY}").as_str()));
@@ -279,7 +282,11 @@ async fn a_client_without_a_key_sends_no_authorization_header() {
     let stub = Stub::start([(LIST.to_owned(), Route::json(401, r#"{"rc":"UNAUTHORIZED"}"#))]).await;
     let client = stub.anonymous().retries(0).build().expect("build");
 
-    let err = client.list().await.expect_err("an anonymous caller cannot enumerate the catalog");
+    let err = client
+        .database()
+        .list()
+        .await
+        .expect_err("an anonymous caller cannot enumerate the catalog");
 
     assert_eq!(err.kind(), ErrorKind::Unauthorized);
     assert_eq!(stub.requests()[0].header("authorization"), None);
@@ -303,7 +310,7 @@ async fn a_trailing_slash_on_the_base_url_is_not_doubled() {
         .build()
         .expect("build");
 
-    client.list().await.expect("list");
+    client.database().list().await.expect("list");
 
     assert_eq!(stub.calls(), vec![LIST]);
 }

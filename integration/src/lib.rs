@@ -115,7 +115,7 @@ pub async fn catalog() -> &'static Catalog {
 
 async fn fetch_catalog() -> Catalog {
     let (client, recorder) = client_for().await;
-    let databases = client.list().await.expect("list");
+    let databases = client.database().list().await.expect("list");
 
     let wire = recorder
         .json_body("/api/v2/database/list")

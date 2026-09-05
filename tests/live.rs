@@ -28,7 +28,7 @@ async fn live_catalog_and_download() {
     }
     let client = builder.build().expect("build");
 
-    let databases = client.list().await.expect("list");
+    let databases = client.database().list().await.expect("list");
     println!("{} families visible to this key", databases.len());
     for database in &databases {
         println!("  {} {} {:?}", database.base, database.standing, database.redistribution);
@@ -43,14 +43,14 @@ async fn live_catalog_and_download() {
         .find_map(|version| version.formats.first().map(|format| (version.id.clone(), *format)))
         .expect("this key licenses nothing, so there is nothing to download");
 
-    let meta = client.metadata(&id).await.expect("metadata");
+    let meta = client.database().metadata(&id).await.expect("metadata");
     let size = *meta.size.get(format.as_str()).expect("no size is published for this format");
     println!("{id}.{format}: {size} bytes, built {}", meta.updated);
     assert!(size > 0 && size <= CEILING, "{id} is {size} bytes, past the {CEILING} ceiling");
 
-    let bytes = client.download_bytes(&id, format).await.expect("download_bytes");
+    let bytes = client.database().download_bytes(&id, format).await.expect("download_bytes");
     assert_eq!(bytes.len() as i64, size, "the transfer and the published size disagree");
 
-    let sums = client.checksums(&id, format).await.expect("checksums");
+    let sums = client.database().checksums(&id, format).await.expect("checksums");
     assert_eq!(sums.sha256.len(), 64, "sha256 {:?} did not unwrap past its key", sums.sha256);
 }

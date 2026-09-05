@@ -15,17 +15,28 @@ const CHECKSUM: &str = "/api/v2/database/checksum";
 const DOWNLOADS: &str = "/api/v2/database/downloads";
 const DOWNLOAD: &str = "/api/v2/database/download";
 
-/// The database API, which is the whole of InternetData's public surface.
+/// The database catalog and its downloads, which is the whole of InternetData's
+/// public surface.
 ///
-/// Split from `client.rs`, which owns construction and the retry loop, because
-/// these seven calls are the part a reader is looking for.
-impl Client {
+/// Reached through [`Client::database`]. Named `DatabaseApi` rather than
+/// `Database` because [`Database`] is already the shape of one database family,
+/// and it is what the other InternetData SDKs call this type.
+#[derive(Debug, Clone, Copy)]
+pub struct DatabaseApi<'a> {
+    client: &'a Client,
+}
+
+impl<'a> DatabaseApi<'a> {
+    pub(crate) fn new(client: &'a Client) -> Self {
+        Self { client }
+    }
+
     /// Every database FAMILY your organization may see, with where each one
     /// stands: `licensed`, `expired`, or `unlicensed` for one published but
     /// never bought.
     ///
     /// A licence covers a family while a download names one of its versions, so
-    /// the ids [`Client::download`] and [`Client::checksums`] take come from
+    /// the ids [`DatabaseApi::download`] and [`DatabaseApi::checksums`] take come from
     /// [`Database::versions`] rather than from the family itself.
     ///
     /// **This listing is yours, not everyone's.** A database commissioned for a
@@ -90,7 +101,8 @@ impl Client {
     pub async fn download_url(&self, id: &str, format: impl Into<Format>) -> Result<String, Error> {
         let format = format.into();
         let query = [("id", id), ("format", format.as_str())];
-        with_retry(self.retries(), || self.transport().get_redirect(DOWNLOAD, &query)).await
+        with_retry(self.client.retries(), || self.client.transport().get_redirect(DOWNLOAD, &query))
+            .await
     }
 
     /// Downloads one database file to `path` and returns the bytes written.
@@ -131,8 +143,8 @@ impl Client {
     /// **This holds the entire file in memory**, and the catalog spans seven
     /// orders of magnitude, from `bogon_asn_v1` at 264 bytes to the largest
     /// datasets at several gigabytes. Reach for it at the small end, where the
-    /// bytes go straight into a parser, and use [`Client::download`] for
-    /// anything you have not checked with [`Client::metadata`].
+    /// bytes go straight into a parser, and use [`DatabaseApi::download`] for
+    /// anything you have not checked with [`DatabaseApi::metadata`].
     pub async fn download_bytes(
         &self,
         id: &str,
@@ -156,7 +168,7 @@ impl Client {
     // Transport::get_file builds that request without one.
     async fn fetch_file(&self, id: &str, format: Format) -> Result<reqwest::Response, Error> {
         let url = self.download_url(id, format).await?;
-        with_retry(self.retries(), || self.transport().get_file(&url)).await
+        with_retry(self.client.retries(), || self.client.transport().get_file(&url)).await
     }
 
     async fn get<T: serde::de::DeserializeOwned>(
@@ -164,7 +176,7 @@ impl Client {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<T, Error> {
-        with_retry(self.retries(), || self.transport().get_json(path, query)).await
+        with_retry(self.client.retries(), || self.client.transport().get_json(path, query)).await
     }
 }
 

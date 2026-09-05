@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::database::DatabaseApi;
 use crate::error::Error;
 use crate::transport::Transport;
 
@@ -21,7 +22,7 @@ const RETRY_BASE_DELAY: Duration = Duration::from_millis(250);
 /// files, and the one thing worth not fetching twice is a multi-gigabyte
 /// download that is already on your disk; a per-process cache in front of it
 /// would hold the file in memory and still not survive a restart. Poll
-/// [`Client::metadata`] for `updated` and skip the transfer yourself.
+/// [`DatabaseApi::metadata`] for `updated` and skip the transfer yourself.
 #[derive(Debug, Clone)]
 pub struct Client(Arc<Inner>);
 
@@ -41,6 +42,16 @@ impl Client {
 
     pub fn builder() -> ClientBuilder {
         ClientBuilder::default()
+    }
+
+    /// The database catalog and its downloads, which is every call this API
+    /// serves.
+    ///
+    /// They hang off here rather than off the client itself, which is where the
+    /// sibling VPNDetection crate keeps the same calls, so one program holding
+    /// both spells the two the same way.
+    pub fn database(&self) -> DatabaseApi<'_> {
+        DatabaseApi::new(self)
     }
 
     pub(crate) fn transport(&self) -> &Transport {
@@ -93,7 +104,7 @@ impl ClientBuilder {
     /// redirects by default and its policy is a client-level setting with no
     /// per-request override, so a following client would chase the download
     /// endpoint's 302 into object storage instead of handing back the link.
-    /// [`Client::download_url`] refuses rather than downloading, but only after
+    /// [`DatabaseApi::download_url`] refuses rather than downloading, but only after
     /// the request has been spent.
     ///
     /// **And do not put a total [`reqwest::ClientBuilder::timeout`] on it.**

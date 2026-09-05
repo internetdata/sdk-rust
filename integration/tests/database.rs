@@ -70,7 +70,7 @@ async fn a_database_the_organization_does_not_license_is_refused_cleanly() {
     let (client, recorder) = client_for().await;
 
     let err =
-        client.download_url(unlicensed, Format::Csvgz).await.unwrap_err_or_explain(unlicensed);
+        client.database().download_url(unlicensed, Format::Csvgz).await.unwrap_err_or_explain(unlicensed);
 
     assert_eq!(err.kind(), ErrorKind::Forbidden, "kind: {err}");
     assert_eq!(err.status(), Some(403));
@@ -122,7 +122,7 @@ async fn download_bytes_agrees_with_the_streamed_copy() {
     };
     let (client, _) = client_for().await;
 
-    let raw = client.download_bytes(&transfer.id, transfer.format).await.expect("download_bytes");
+    let raw = client.database().download_bytes(&transfer.id, transfer.format).await.expect("download_bytes");
 
     assert_eq!(raw.len() as u64, transfer.written, "the in-memory copy is a different size");
     assert_eq!(
@@ -145,7 +145,7 @@ async fn the_presigned_link_works_with_no_credential_at_all() {
     // Straight at staging rather than through the recorder: the recorder is what
     // proves what was SENT, and here the point is that a stranger's HTTP client
     // needs nothing from us.
-    let url = client.download_url(&transfer.id, transfer.format).await.expect("download_url");
+    let url = client.database().download_url(&transfer.id, transfer.format).await.expect("download_url");
     let stranger = reqwest::Client::builder().build().expect("building a plain client");
     let body =
         stranger.get(&url).send().await.expect("fetching the link").bytes().await.expect("body");
@@ -192,7 +192,7 @@ async fn transfer() -> Option<Transfer> {
     let mut smallest: Option<(String, Format, i64)> = None;
     for (id, format) in licensed {
         let format = Format::from(format);
-        let meta = client.metadata(id).await.expect("metadata");
+        let meta = client.database().metadata(id).await.expect("metadata");
         assert_eq!(meta.id, id, "metadata answered about the wrong database");
         let Some(&size) = meta.size.get(format.as_str()) else {
             continue;
@@ -209,10 +209,10 @@ async fn transfer() -> Option<Transfer> {
     }
 
     let path = scratch().join(format!("{id}.{format}"));
-    let written = client.download(&id, format, &path).await.expect("download");
+    let written = client.database().download(&id, format, &path).await.expect("download");
     // Read AFTER the transfer, so a rebuild between the two calls shows up as a
     // digest mismatch rather than passing against a digest of nothing.
-    let sums = client.checksums(&id, format).await.expect("checksums");
+    let sums = client.database().checksums(&id, format).await.expect("checksums");
     println!("{id}.{format}: {written} bytes, metadata says {size}");
 
     Some(Transfer { id, format, size, written, path, sha256: sums.sha256, facts: recorder.facts() })

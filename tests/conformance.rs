@@ -35,7 +35,7 @@ async fn every_refusal_is_classified_the_way_the_corpus_says() {
         // No retries, so a retryable failure surfaces rather than looping.
         let client = stub.client().retries(0).build().expect("build");
 
-        let err = client.metadata("any_database_v1").await.expect_err(&case.name);
+        let err = client.database().metadata("any_database_v1").await.expect_err(&case.name);
 
         assert_eq!(err.kind().as_str(), case.expect.kind, "{}: kind", case.name);
         assert_eq!(err.retryable(), case.expect.retryable, "{}: retryable", case.name);
@@ -65,7 +65,7 @@ async fn a_non_retryable_refusal_is_issued_exactly_once() {
         let stub = Stub::start([(METADATA.to_owned(), route)]).await;
         let client = stub.client().retries(3).build().expect("build");
 
-        client.metadata("any_database_v1").await.expect_err(&case.name);
+        client.database().metadata("any_database_v1").await.expect_err(&case.name);
 
         assert_eq!(stub.count(), 1, "{}: a non-retryable refusal was retried", case.name);
     }
@@ -147,7 +147,7 @@ async fn a_listing_is_returned_as_served() {
     let stub = Stub::start([(LIST.to_owned(), Route::ok(listing(&served)))]).await;
     let client = stub.client().build().expect("build");
 
-    let databases = client.list().await.expect("list");
+    let databases = client.database().list().await.expect("list");
 
     let got: Vec<&str> = databases.iter().map(|database| database.base.as_str()).collect();
     assert_eq!(got, served, "{}", corpus::load().visibility.why);
@@ -163,14 +163,14 @@ async fn no_catalog_is_compiled_into_the_client() {
     let stub = Stub::start([(LIST.to_owned(), Route::ok(listing(&unheard_of)))]).await;
     let client = stub.client().build().expect("build");
 
-    let databases = client.list().await.expect("list");
+    let databases = client.database().list().await.expect("list");
     assert_eq!(bases(&databases), set(&unheard_of), "an unknown family did not survive the decode");
 
     let empty = Stub::start([(LIST.to_owned(), Route::ok(r#"{"databases":[]}"#))]).await;
     let client = empty.client().build().expect("build");
 
     assert!(
-        client.list().await.expect("list").is_empty(),
+        client.database().list().await.expect("list").is_empty(),
         "an organization that licenses nothing was shown a catalog from somewhere else"
     );
 }
@@ -183,14 +183,14 @@ async fn no_catalog_is_compiled_into_the_client() {
 async fn a_listing_is_never_reused_across_clients() {
     let stub = Stub::start([(LIST.to_owned(), Route::ok(listing(&["bogon_asn"])))]).await;
     let first = stub.client().api_key("key-of-one-org").build().expect("build");
-    first.list().await.expect("list");
+    first.database().list().await.expect("list");
 
     // The same endpoint now answers what the OTHER organization may see. A
     // client that reused the first answer would report the first org's catalog.
     stub.route(LIST, Route::ok(listing(&["cdn_ip", "hosting_ip"])));
     let second = stub.client().api_key("key-of-another-org").build().expect("build");
 
-    let databases = second.list().await.expect("list");
+    let databases = second.database().list().await.expect("list");
 
     assert_eq!(bases(&databases), set(&["cdn_ip", "hosting_ip"]));
     assert_eq!(stub.count(), 2, "the second client did not ask for its own listing");

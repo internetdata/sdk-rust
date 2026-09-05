@@ -4,13 +4,14 @@
 //!
 //! Start with [`Client::builder`] and an API key carrying the `db.download`
 //! scope. There is no anonymous tier and no per-address lookup here: the whole
-//! API is the database catalog and the files behind it.
+//! API is the database catalog and the files behind it, reached through
+//! [`Client::database`].
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), internetdata::Error> {
 //! let client = internetdata::Client::builder().api_key("your-api-key").build()?;
 //!
-//! for database in client.list().await? {
+//! for database in client.database().list().await? {
 //!     println!("{}: {}", database.base, database.standing);
 //! }
 //! # Ok(())
@@ -20,8 +21,8 @@
 //! # Your catalog is not everyone's catalog
 //!
 //! A database commissioned for a single customer is ABSENT from
-//! [`Client::list`] for an organization that does not license it, rather than
-//! present with an [`Standing::Unlicensed`] standing. The server decides what
+//! [`DatabaseApi::list`] for an organization that does not license it, rather
+//! than present with an [`Standing::Unlicensed`] standing. The server decides what
 //! you may see, so treat the listing as this key's answer: do not build a
 //! catalog from any other source, and do not reuse one organization's listing
 //! for another key.
@@ -38,7 +39,7 @@
 //! # fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! let runtime = tokio::runtime::Runtime::new()?;
 //! let client = internetdata::Client::builder().api_key("your-api-key").build()?;
-//! let databases = runtime.block_on(client.list())?;
+//! let databases = runtime.block_on(client.database().list())?;
 //! # let _ = databases;
 //! # Ok(())
 //! # }
@@ -52,6 +53,7 @@ mod generated;
 mod transport;
 
 pub use client::{Client, ClientBuilder, DEFAULT_BASE_URL};
+pub use database::DatabaseApi;
 pub use error::{Error, ErrorKind};
 
 use generated::models;

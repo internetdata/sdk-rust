@@ -23,7 +23,8 @@ async fn download_streams_a_database_to_a_path_and_leaves_no_part_file() {
     let scratch = Scratch::new("streamed");
     let path = scratch.join("bogon_ip_v1.csv.gz");
 
-    let written = client.download(DATASET, Format::Csvgz, &path).await.expect("download");
+    let written =
+        client.database().download(DATASET, Format::Csvgz, &path).await.expect("download");
 
     assert_eq!(written, payload().len() as u64);
     assert_eq!(std::fs::read(&path).expect("reading the download back"), payload().as_bytes());
@@ -41,6 +42,7 @@ async fn the_object_storage_request_carries_no_credential() {
     let scratch = Scratch::new("credential");
 
     client
+        .database()
         .download(DATASET, Format::Csvgz, scratch.join("bogon_ip_v1.csv.gz"))
         .await
         .expect("download");
@@ -69,8 +71,8 @@ async fn download_bytes_agrees_with_the_streamed_copy() {
     let scratch = Scratch::new("agreement");
     let path = scratch.join("bogon_ip_v1.csv.gz");
 
-    client.download(DATASET, Format::Csvgz, &path).await.expect("download");
-    let bytes = client.download_bytes(DATASET, Format::Csvgz).await.expect("bytes");
+    client.database().download(DATASET, Format::Csvgz, &path).await.expect("download");
+    let bytes = client.database().download_bytes(DATASET, Format::Csvgz).await.expect("bytes");
 
     assert_eq!(bytes, std::fs::read(&path).expect("reading the download back"));
 }
@@ -87,6 +89,7 @@ async fn a_truncated_transfer_fails_and_leaves_nothing_behind() {
     let path = scratch.join("bogon_ip_v1.csv.gz");
 
     let err = client
+        .database()
         .download(DATASET, Format::Csvgz, &path)
         .await
         .expect_err("a short body must not be written out as a whole database");
@@ -110,7 +113,11 @@ async fn a_failed_transfer_leaves_the_database_already_on_disk_untouched() {
     let path = scratch.join("bogon_ip_v1.csv.gz");
     std::fs::write(&path, b"yesterday's database").expect("seeding the destination");
 
-    client.download(DATASET, Format::Csvgz, &path).await.expect_err("the transfer must fail");
+    client
+        .database()
+        .download(DATASET, Format::Csvgz, &path)
+        .await
+        .expect_err("the transfer must fail");
 
     assert_eq!(
         std::fs::read(&path).expect("yesterday's database is gone"),
@@ -125,6 +132,7 @@ async fn a_truncated_download_bytes_fails_rather_than_returning_a_short_buffer()
     let client = stub.client().build().expect("build");
 
     let err = client
+        .database()
         .download_bytes(DATASET, Format::Csvgz)
         .await
         .expect_err("a short body must not come back as the database");
@@ -143,6 +151,7 @@ async fn a_database_the_organization_does_not_license_is_refused_once() {
     let path = scratch.join("vpn_ip_v1.csv.gz");
 
     let err = client
+        .database()
         .download("vpn_ip_v1", Format::Csvgz, &path)
         .await
         .expect_err("an unlicensed database must be refused");
@@ -162,8 +171,11 @@ async fn a_refused_download_link_names_object_storage() {
     let stub = serving(Route::json(403, "<Error><Code>AccessDenied</Code></Error>")).await;
     let client = stub.client().retries(1).build().expect("build");
 
-    let err =
-        client.download_bytes(DATASET, Format::Csvgz).await.expect_err("a refused link must fail");
+    let err = client
+        .database()
+        .download_bytes(DATASET, Format::Csvgz)
+        .await
+        .expect_err("a refused link must fail");
 
     assert_eq!(err.kind(), ErrorKind::Forbidden);
     assert!(err.message().contains("object storage"), "{}", err.message());
