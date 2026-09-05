@@ -1,0 +1,15 @@
+# Cargo build output. scripts/cargo.sh keeps this in a docker volume instead, so
+# it should never appear here at all.
+/target/
+
+# A published library does not commit a lockfile: consumers resolve their own,
+# and a committed one only ever goes stale.
+/Cargo.lock
+
+# Scratch tree scripts/generate.sh unpacks the generator's output into.
+/.gen/
+
+# The integration crate is never published and resolves the released SDK afresh
+# on every run, so its lock file is scratch rather than a pin.
+/integration/target/
+/integration/Cargo.lock
