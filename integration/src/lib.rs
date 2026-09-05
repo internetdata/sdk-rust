@@ -165,15 +165,15 @@ pub fn assert_catalog_shape(catalog: &Catalog) {
         match family.standing {
             Standing::Unlicensed => {
                 assert!(
-                    family.redistribution.is_none(),
-                    "{base} is unlicensed but names a redistribution right"
+                    family.license_type.is_none(),
+                    "{base} is unlicensed but names a license_type right"
                 );
                 assert!(family.starts.is_none(), "{base} is unlicensed but has a start date");
             }
             Standing::Licensed | Standing::Expired => {
                 assert!(
-                    family.redistribution.is_some(),
-                    "{base} is {} but names no redistribution right",
+                    family.license_type.is_some(),
+                    "{base} is {} but names no license_type right",
                     family.standing
                 );
                 assert!(family.starts.is_some(), "{base} is {} with no start", family.standing);

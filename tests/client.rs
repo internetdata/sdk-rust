@@ -23,7 +23,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     let stub = Stub::start([(
         LIST.to_owned(),
         Route::ok(
-            r#"{"databases":[{"base":"bogon_ip","name":"Bogon IP","summary":"unroutable ranges","standing":"licensed","redistribution":"internal","starts":"2026-01-01T00:00:00.000Z","expires":null,"versions":[{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":["csvgz","mmdb"]}]}]}"#,
+            r#"{"databases":[{"base":"bogon_ip","name":"Bogon IP","summary":"unroutable ranges","standing":"licensed","license_type":"standard","starts":"2026-01-01T00:00:00.000Z","expires":null,"versions":[{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":["csvgz","mmdb"]}]}]}"#,
         ),
     )])
     .await;

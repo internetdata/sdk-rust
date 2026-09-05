@@ -10,7 +10,7 @@
 use std::fmt;
 
 use crate::models::checksums_response::Format;
-use crate::models::database::{Redistribution, Standing};
+use crate::models::database::{LicenseType, Standing};
 use crate::models::database_version::Formats;
 use crate::models::download::Outcome;
 
@@ -50,9 +50,9 @@ wire_spelling!(Standing {
     Unlicensed => "unlicensed",
 });
 
-wire_spelling!(Redistribution {
+wire_spelling!(LicenseType {
     Evaluation => "evaluation",
-    Internal => "internal",
+    Standard => "standard",
     Redistribute => "redistribute",
 });
 

@@ -9,7 +9,7 @@ mod support;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use internetdata::{Database, Format, Formats, Outcome, Redistribution, Standing};
+use internetdata::{Database, Format, Formats, Outcome, LicenseType, Standing};
 use serde_json::{Value, json};
 use support::corpus;
 use support::{Route, Stub};
@@ -79,9 +79,9 @@ fn the_standing_vocabulary_is_exactly_what_the_corpus_declares() {
 }
 
 #[test]
-fn the_redistribution_vocabulary_is_exactly_what_the_corpus_declares() {
-    let wire = [Redistribution::Evaluation, Redistribution::Internal, Redistribution::Redistribute];
-    assert_eq!(spellings(&wire), set(&corpus::load().redistribution));
+fn the_license_type_vocabulary_is_exactly_what_the_corpus_declares() {
+    let wire = [LicenseType::Evaluation, LicenseType::Internal, LicenseType::Redistribute];
+    assert_eq!(spellings(&wire), set(&corpus::load().license_type));
     assert_readers_match_the_wire(&wire);
 }
 
@@ -207,7 +207,7 @@ fn listing(bases: &[&str]) -> String {
                 "name": base,
                 "summary": "one line",
                 "standing": "licensed",
-                "redistribution": "internal",
+                "license_type": "standard",
                 "starts": "2026-01-01T00:00:00.000Z",
                 "expires": null,
                 "versions": [{

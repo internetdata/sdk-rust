@@ -31,7 +31,7 @@ async fn live_catalog_and_download() {
     let databases = client.database().list().await.expect("list");
     println!("{} families visible to this key", databases.len());
     for database in &databases {
-        println!("  {} {} {:?}", database.base, database.standing, database.redistribution);
+        println!("  {} {} {:?}", database.base, database.standing, database.license_type);
     }
 
     // The first LICENSED version this key holds, so the run works for any key

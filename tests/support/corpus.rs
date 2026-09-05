@@ -21,7 +21,7 @@ pub fn load() -> Corpus {
 pub struct Corpus {
     pub errors: Vec<ErrorCase>,
     pub standings: Vec<String>,
-    pub redistribution: Vec<String>,
+    pub license_type: Vec<String>,
     pub formats: Vec<String>,
     pub visibility: Visibility,
 }

@@ -65,7 +65,7 @@ use generated::models;
 // their schemas are generated too; they are not re-exported, because this crate
 // targets v2 alone.
 pub use models::checksums_response::Format;
-pub use models::database::{Redistribution, Standing};
+pub use models::database::{LicenseType, Standing};
 pub use models::database_version::Formats;
 pub use models::download::Outcome;
 pub use models::{

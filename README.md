@@ -54,7 +54,7 @@ for database in client.database().list().await? {
 }
 ```
 
-`standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `redistribution` says what your licence lets you do with the data, and is `None` when there is no licence.
+`standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `license_type` says what your licence lets you do with the data, and is `None` when there is no licence.
 
 ### What is inside a database
 
