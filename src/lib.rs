@@ -3,9 +3,11 @@
 //! checksums.
 //!
 //! Start with [`Client::builder`] and an API key carrying the `db.download`
-//! scope. There is no anonymous tier and no per-address lookup here: the whole
-//! API is the database catalog and the files behind it, reached through
-//! [`Client::database`].
+//! scope. Every database published today is licensed, so a keyless client is
+//! answered `401` - the key is nevertheless OPTIONAL, and a client built without
+//! one sends no `Authorization` header at all. There is no per-address lookup
+//! here: the whole API is the database catalog and the files behind it, reached
+//! through [`Client::database`].
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), internetdata::Error> {

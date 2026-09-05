@@ -18,7 +18,7 @@ Requires Rust 1.85 or newer. Everything is `async` and runs on tokio.
 
 ## Usage
 
-Every call needs an API key carrying the `db.download` scope. Create one in the console, then pass it in:
+Every database published today needs an API key carrying the `db.download` scope. Create one in the console, then pass it in. `api_key` is optional on the builder - leave it out and no `Authorization` header is sent at all, ready for a database served without a licence:
 
 ```rust
 use internetdata::Client;

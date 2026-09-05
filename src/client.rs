@@ -33,9 +33,10 @@ struct Inner {
 }
 
 impl Client {
-    /// A client against production. Every endpoint needs a key, so this is only
-    /// useful with [`ClientBuilder::api_key`]; it exists so a caller reading a
-    /// key out of the environment can build in one line.
+    /// A client against production with no key, which sends no `Authorization`
+    /// header at all. Every endpoint published today needs one, so reach for
+    /// [`Client::builder`] and [`ClientBuilder::api_key`] instead unless you are
+    /// after a database served without a licence.
     pub fn new() -> Result<Self, Error> {
         Self::builder().build()
     }
@@ -63,7 +64,8 @@ impl Client {
     }
 }
 
-/// Builds a [`Client`]. With nothing set it talks to production with no key.
+/// Builds a [`Client`]. With nothing set it talks to production with no key,
+/// which every endpoint published today answers `401` to.
 #[derive(Debug, Default)]
 pub struct ClientBuilder {
     api_key: Option<String>,
@@ -81,6 +83,10 @@ impl ClientBuilder {
     /// catalog you can see and the databases you may download. The key needs the
     /// `db.download` scope; keys are default-deny, so an existing key does not
     /// gain database access until that scope is added to it.
+    ///
+    /// Optional. Leave it unset, or pass an empty string, and no `Authorization`
+    /// header is sent - which is what an unset `${{ secrets.X }}` interpolates
+    /// to, and a better answer than `Bearer ` with nothing behind it.
     pub fn api_key(mut self, key: impl Into<String>) -> Self {
         self.api_key = Some(key.into());
         self
@@ -148,7 +154,8 @@ impl ClientBuilder {
             transport: Transport::new(
                 http,
                 base_url.trim_end_matches('/').to_owned(),
-                self.api_key,
+                // Empty counts as absent, in one place rather than per setter.
+                self.api_key.filter(|key| !key.is_empty()),
             ),
             retries: self.retries.unwrap_or(DEFAULT_RETRIES),
         })))
