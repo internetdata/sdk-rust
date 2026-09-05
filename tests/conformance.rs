@@ -80,7 +80,7 @@ fn the_standing_vocabulary_is_exactly_what_the_corpus_declares() {
 
 #[test]
 fn the_license_type_vocabulary_is_exactly_what_the_corpus_declares() {
-    let wire = [LicenseType::Evaluation, LicenseType::Internal, LicenseType::Redistribute];
+    let wire = [LicenseType::Evaluation, LicenseType::Standard, LicenseType::Redistribute];
     assert_eq!(spellings(&wire), set(&corpus::load().license_type));
     assert_readers_match_the_wire(&wire);
 }
