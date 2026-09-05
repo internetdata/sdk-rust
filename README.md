@@ -1,4 +1,4 @@
-# [<img src="https://s3.internetdata.io/internetdata-public/brand/mark.svg" alt="InternetData" width="24"/>](https://internetdata.io/) InternetData Rust Client Library
+# [<img src="https://s3.internetdata.io/internetdata-public/brand/mark.svg" alt="InternetData" height="28"/>](https://internetdata.io/) InternetData Rust Client Library
 
 [![crates.io](https://img.shields.io/crates/v/internetdata.svg)](https://crates.io/crates/internetdata)
 [![docs.rs](https://img.shields.io/docsrs/internetdata)](https://docs.rs/internetdata)
