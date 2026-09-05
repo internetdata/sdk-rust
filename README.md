@@ -56,8 +56,6 @@ for database in client.database().list().await? {
 
 `standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `redistribution` says what your licence lets you do with the data, and is `None` when there is no licence.
 
-**Your catalog is not everyone's catalog.** A database commissioned for a single customer is absent from this listing entirely for an organization that does not license it, rather than listed as `Unlicensed`. The server decides what you may see, so treat the answer as this key's answer: do not build a catalog from anywhere else, and do not reuse one organization's listing for another key.
-
 ### What is inside a database
 
 `metadata` carries the column schema, a few real rows, the row count and the size of each artifact, without downloading anything. Poll it to decide whether today's build is worth fetching, and read `size` to know what a transfer will cost before you start it:
