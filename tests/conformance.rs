@@ -9,7 +9,7 @@ mod support;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use internetdata::{Database, Format, Formats, Outcome, LicenseType, Standing};
+use internetdata::{Database, Format, Formats, LicenseType, Outcome, Standing};
 use serde_json::{Value, json};
 use support::corpus;
 use support::{Route, Stub};
