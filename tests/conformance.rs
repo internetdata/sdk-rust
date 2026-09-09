@@ -209,7 +209,7 @@ fn listing(bases: &[&str]) -> String {
                 "standing": "licensed",
                 "license_type": "standard",
                 "starts": "2026-01-01T00:00:00.000Z",
-                "expires": null,
+                "expires": null, "renews_at": null, "notice_due_at": null,
                 "versions": [{
                     "id": format!("{base}_v1"),
                     "version": 1,

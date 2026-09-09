@@ -34,21 +34,11 @@ pub struct Database {
     #[serde(rename = "expires", deserialize_with = "Option::deserialize")]
     pub expires: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// When a rolling licence next renews. Null when the licence has no defined term, when expires sets a hard stop instead, and when there is no licence.
-    #[serde(
-        rename = "renews_at",
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub renews_at: Option<Option<chrono::DateTime<chrono::FixedOffset>>>,
+    #[serde(rename = "renews_at", deserialize_with = "Option::deserialize")]
+    pub renews_at: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// The last day notice of non-renewal can be given for the term ending at renews_at. Null whenever renews_at is, and when the agreement records no notice period.
-    #[serde(
-        rename = "notice_due_at",
-        default,
-        with = "::serde_with::rust::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub notice_due_at: Option<Option<chrono::DateTime<chrono::FixedOffset>>>,
+    #[serde(rename = "notice_due_at", deserialize_with = "Option::deserialize")]
+    pub notice_due_at: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// Every published version of this family, oldest first. Old versions are frozen rather than migrated, so both stay downloadable.
     #[serde(rename = "versions")]
     pub versions: Vec<models::DatabaseVersion>,
@@ -64,6 +54,8 @@ impl Database {
         license_type: Option<LicenseType>,
         starts: Option<chrono::DateTime<chrono::FixedOffset>>,
         expires: Option<chrono::DateTime<chrono::FixedOffset>>,
+        renews_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+        notice_due_at: Option<chrono::DateTime<chrono::FixedOffset>>,
         versions: Vec<models::DatabaseVersion>,
     ) -> Database {
         Database {
@@ -74,8 +66,8 @@ impl Database {
             license_type,
             starts,
             expires,
-            renews_at: None,
-            notice_due_at: None,
+            renews_at,
+            notice_due_at,
             versions,
         }
     }
