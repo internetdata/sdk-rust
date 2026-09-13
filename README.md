@@ -74,7 +74,7 @@ for column in &meta.schema["csvgz"] {
 ### Downloading
 
 ```rust
-use internetdata::Format;
+use internetdata::DatabaseFormat;
 
 let written = client.database().download("bogon_ip_v1", DatabaseFormat::Csvgz, "./bogon_ip.csv.gz").await?;
 ```
