@@ -9,13 +9,11 @@
 
 use std::fmt;
 
-use crate::models::checksums_response::Format;
-use crate::models::database::{LicenseType, Standing};
-use crate::models::database_version::Formats;
+use crate::models::database::LicenseType;
 use crate::models::download::Outcome;
+use crate::models::{DatabaseFormat, Standing};
 
-/// Writes the four `as_str` + `Display` pairs, which are otherwise the same
-/// eleven lines four times over.
+/// Writes the `as_str` + `Display` pair for an enum the generator leaves bare.
 macro_rules! wire_spelling {
     ($type:ty { $($variant:ident => $wire:literal),+ $(,)? }) => {
         impl $type {
@@ -35,16 +33,30 @@ macro_rules! wire_spelling {
     };
 }
 
+/// `as_str` alone, for an enum the spec NAMES - the generator emits a Display
+/// for those, printing the same wire spelling, so writing a second one is a
+/// conflicting impl rather than a duplicate.
+macro_rules! wire_str {
+    ($type:ty { $($variant:ident => $wire:literal),+ $(,)? }) => {
+        impl $type {
+            /// The spelling the API uses, which is not the Rust variant name.
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $wire),+
+                }
+            }
+        }
+    };
+}
+
 // Not every database is built in every format: the `_provider` catalogs are
 // keyed by provider id rather than by IP range, so no MMDB exists for them.
 // `Database::versions` says which formats each version has. Plain comments
 // rather than doc ones, because rustdoc does not document what a macro
 // invocation expands to.
-wire_spelling!(Format { Csvgz => "csvgz", Mmdb => "mmdb" });
+wire_str!(DatabaseFormat { Csvgz => "csvgz", Mmdb => "mmdb" });
 
-wire_spelling!(Formats { Csvgz => "csvgz", Mmdb => "mmdb" });
-
-wire_spelling!(Standing {
+wire_str!(Standing {
     Licensed => "licensed",
     Expired => "expired",
     Unlicensed => "unlicensed",
@@ -64,28 +76,3 @@ wire_spelling!(Outcome {
     Unknown => "unknown",
     Unavailable => "unavailable",
 });
-
-// The spec spells the same two-value format enum twice, once beside a version's
-// built formats and once beside a checksum's, so the generator emits two types
-// for it. These are the total conversions between them, and every call that
-// takes a format takes `impl Into<Format>`, so `download(id, version.formats[0],
-// path)` works without a caller ever seeing the seam. Exhaustive matches, so a
-// third format added to the spec fails the build here rather than being silently
-// dropped on one side.
-impl From<Formats> for Format {
-    fn from(format: Formats) -> Self {
-        match format {
-            Formats::Csvgz => Self::Csvgz,
-            Formats::Mmdb => Self::Mmdb,
-        }
-    }
-}
-
-impl From<Format> for Formats {
-    fn from(format: Format) -> Self {
-        match format {
-            Format::Csvgz => Self::Csvgz,
-            Format::Mmdb => Self::Mmdb,
-        }
-    }
-}

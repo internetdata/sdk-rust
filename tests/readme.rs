@@ -5,7 +5,7 @@
 // a reader. Mirror any README edit here.
 #![allow(unused, path_statements, clippy::no_effect)]
 
-use internetdata::{Client, ErrorKind, Format};
+use internetdata::{Client, ErrorKind, DatabaseFormat};
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
@@ -35,13 +35,13 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let written =
-        client.database().download("bogon_ip_v1", Format::Csvgz, "./bogon_ip.csv.gz").await?;
+        client.database().download("bogon_ip_v1", DatabaseFormat::Csvgz, "./bogon_ip.csv.gz").await?;
 
-    let raw = client.database().download_bytes("bogon_asn_v1", Format::Csvgz).await?;
+    let raw = client.database().download_bytes("bogon_asn_v1", DatabaseFormat::Csvgz).await?;
 
-    let url = client.database().download_url("bogon_ip_v1", Format::Csvgz).await?;
+    let url = client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
 
-    let sums = client.database().checksums("bogon_ip_v1", Format::Csvgz).await?;
+    let sums = client.database().checksums("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
     println!("{}", sums.sha256);
 
     for attempt in client.database().downloads(Some(20)).await? {

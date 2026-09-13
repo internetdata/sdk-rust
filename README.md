@@ -76,19 +76,19 @@ for column in &meta.schema["csvgz"] {
 ```rust
 use internetdata::Format;
 
-let written = client.database().download("bogon_ip_v1", Format::Csvgz, "./bogon_ip.csv.gz").await?;
+let written = client.database().download("bogon_ip_v1", DatabaseFormat::Csvgz, "./bogon_ip.csv.gz").await?;
 ```
 
 `download` streams to disk through a neighboring `.part` file, so nothing bigger than a chunk is ever held in memory and a transfer that dies half way neither leaves a truncated file nor replaces the copy already on disk.
 
 ```rust
-let raw = client.database().download_bytes("bogon_asn_v1", Format::Csvgz).await?;
+let raw = client.database().download_bytes("bogon_asn_v1", DatabaseFormat::Csvgz).await?;
 ```
 
 `download_bytes` holds the whole file in memory. The catalog spans seven orders of magnitude, from a few hundred bytes to several gigabytes, so check `metadata` first for anything you have not measured.
 
 ```rust
-let url = client.database().download_url("bogon_ip_v1", Format::Csvgz).await?;
+let url = client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
 ```
 
 `download_url` hands back the time-limited link the API redirects to, so you can run the transfer yourself with whatever tool you like. It authorizes itself and carries none of your credentials, so it is safe to pass on; the link authorizes the START of a transfer, so one already running is not interrupted when it lapses.
@@ -98,7 +98,7 @@ Not every database is built in every format, which is why `versions` lists the o
 ### Verifying a download
 
 ```rust
-let sums = client.database().checksums("bogon_ip_v1", Format::Csvgz).await?;
+let sums = client.database().checksums("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
 println!("{}", sums.sha256);
 ```
 

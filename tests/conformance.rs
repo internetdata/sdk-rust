@@ -9,7 +9,7 @@ mod support;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use internetdata::{Database, Format, Formats, LicenseType, Outcome, Standing};
+use internetdata::{Database, DatabaseFormat, LicenseType, Outcome, Standing};
 use serde_json::{Value, json};
 use support::corpus;
 use support::{Route, Stub};
@@ -106,15 +106,15 @@ fn the_outcome_readers_agree_with_the_wire() {
 #[test]
 fn the_format_vocabulary_is_exactly_what_the_corpus_declares() {
     let expected = set(&corpus::load().formats);
-    assert_eq!(spellings(&[Format::Csvgz, Format::Mmdb]), expected);
-    assert_eq!(spellings(&[Formats::Csvgz, Formats::Mmdb]), expected);
+    assert_eq!(spellings(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]), expected);
+    assert_eq!(spellings(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]), expected);
 
-    for (built, single) in [(Formats::Csvgz, Format::Csvgz), (Formats::Mmdb, Format::Mmdb)] {
-        assert_eq!(Format::from(built), single, "{built} does not convert to itself");
-        assert_eq!(Formats::from(single), built, "{single} does not convert back");
+    for (built, single) in [(DatabaseFormat::Csvgz, DatabaseFormat::Csvgz), (DatabaseFormat::Mmdb, DatabaseFormat::Mmdb)] {
+        assert_eq!(DatabaseFormat::from(built), single, "{built} does not convert to itself");
+        assert_eq!(DatabaseFormat::from(single), built, "{single} does not convert back");
     }
-    assert_readers_match_the_wire(&[Format::Csvgz, Format::Mmdb]);
-    assert_readers_match_the_wire(&[Formats::Csvgz, Formats::Mmdb]);
+    assert_readers_match_the_wire(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
+    assert_readers_match_the_wire(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
 }
 
 /// Every visibility rule the corpus names has a test here, and a rule it grows

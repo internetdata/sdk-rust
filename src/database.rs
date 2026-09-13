@@ -4,7 +4,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::client::{Client, with_retry};
 use crate::error::Error;
-use crate::models::checksums_response::Format;
+use crate::models::DatabaseFormat as Format;
 use crate::models::{
     Checksums, ChecksumsResponse, Database, DatabaseList, DatabaseMetadata, Download, DownloadList,
 };

@@ -64,10 +64,9 @@ use generated::models;
 // names the module path. The spec still describes the legacy v1 endpoints and
 // their schemas are generated too; they are not re-exported, because this crate
 // targets v2 alone.
-pub use models::checksums_response::Format;
-pub use models::database::{LicenseType, Standing};
-pub use models::database_version::Formats;
+pub use models::database::LicenseType;
 pub use models::download::Outcome;
+pub use models::{DatabaseFormat, Standing};
 pub use models::{
     Checksums, ChecksumsResponse, Database, DatabaseMetadata, DatabaseMetadataColumn,
     DatabaseVersion, Download,

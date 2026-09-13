@@ -9,7 +9,7 @@ mod support;
 
 use std::path::{Path, PathBuf};
 
-use internetdata::{ErrorKind, Format};
+use internetdata::{ErrorKind, DatabaseFormat};
 use support::{KEY, Route, Stub};
 
 const DATASET: &str = "bogon_ip_v1";
@@ -24,7 +24,7 @@ async fn download_streams_a_database_to_a_path_and_leaves_no_part_file() {
     let path = scratch.join("bogon_ip_v1.csv.gz");
 
     let written =
-        client.database().download(DATASET, Format::Csvgz, &path).await.expect("download");
+        client.database().download(DATASET, DatabaseFormat::Csvgz, &path).await.expect("download");
 
     assert_eq!(written, payload().len() as u64);
     assert_eq!(std::fs::read(&path).expect("reading the download back"), payload().as_bytes());
@@ -43,7 +43,7 @@ async fn the_object_storage_request_carries_no_credential() {
 
     client
         .database()
-        .download(DATASET, Format::Csvgz, scratch.join("bogon_ip_v1.csv.gz"))
+        .download(DATASET, DatabaseFormat::Csvgz, scratch.join("bogon_ip_v1.csv.gz"))
         .await
         .expect("download");
 
@@ -71,8 +71,8 @@ async fn download_bytes_agrees_with_the_streamed_copy() {
     let scratch = Scratch::new("agreement");
     let path = scratch.join("bogon_ip_v1.csv.gz");
 
-    client.database().download(DATASET, Format::Csvgz, &path).await.expect("download");
-    let bytes = client.database().download_bytes(DATASET, Format::Csvgz).await.expect("bytes");
+    client.database().download(DATASET, DatabaseFormat::Csvgz, &path).await.expect("download");
+    let bytes = client.database().download_bytes(DATASET, DatabaseFormat::Csvgz).await.expect("bytes");
 
     assert_eq!(bytes, std::fs::read(&path).expect("reading the download back"));
 }
@@ -90,7 +90,7 @@ async fn a_truncated_transfer_fails_and_leaves_nothing_behind() {
 
     let err = client
         .database()
-        .download(DATASET, Format::Csvgz, &path)
+        .download(DATASET, DatabaseFormat::Csvgz, &path)
         .await
         .expect_err("a short body must not be written out as a whole database");
 
@@ -115,7 +115,7 @@ async fn a_failed_transfer_leaves_the_database_already_on_disk_untouched() {
 
     client
         .database()
-        .download(DATASET, Format::Csvgz, &path)
+        .download(DATASET, DatabaseFormat::Csvgz, &path)
         .await
         .expect_err("the transfer must fail");
 
@@ -133,7 +133,7 @@ async fn a_truncated_download_bytes_fails_rather_than_returning_a_short_buffer()
 
     let err = client
         .database()
-        .download_bytes(DATASET, Format::Csvgz)
+        .download_bytes(DATASET, DatabaseFormat::Csvgz)
         .await
         .expect_err("a short body must not come back as the database");
 
@@ -152,7 +152,7 @@ async fn a_database_the_organization_does_not_license_is_refused_once() {
 
     let err = client
         .database()
-        .download("vpn_ip_v1", Format::Csvgz, &path)
+        .download("vpn_ip_v1", DatabaseFormat::Csvgz, &path)
         .await
         .expect_err("an unlicensed database must be refused");
 
@@ -173,7 +173,7 @@ async fn a_refused_download_link_names_object_storage() {
 
     let err = client
         .database()
-        .download_bytes(DATASET, Format::Csvgz)
+        .download_bytes(DATASET, DatabaseFormat::Csvgz)
         .await
         .expect_err("a refused link must fail");
 

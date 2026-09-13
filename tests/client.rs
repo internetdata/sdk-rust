@@ -6,7 +6,7 @@ mod support;
 
 use std::time::{Duration, Instant};
 
-use internetdata::{Client, ErrorKind, Format, Formats, Outcome, Standing};
+use internetdata::{Client, ErrorKind, DatabaseFormat, Outcome, Standing};
 use support::{KEY, Route, Stub};
 
 const LIST: &str = "/api/v2/database/list";
@@ -40,7 +40,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     let version = &family.versions[0];
     assert_eq!(version.id, "bogon_ip_v1", "the id a download takes lives on the VERSION");
     assert_eq!(version.version, 1);
-    assert_eq!(version.formats, vec![Formats::Csvgz, Formats::Mmdb]);
+    assert_eq!(version.formats, vec![DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
 }
 
 /// Which digests a database publishes is the API's choice, so the whole set
@@ -57,7 +57,7 @@ async fn checksums_returns_the_whole_digest_set_from_under_its_key() {
     .await;
     let client = stub.client().build().expect("build");
 
-    let sums = client.database().checksums("bogon_ip_v1", Format::Mmdb).await.expect("checksums");
+    let sums = client.database().checksums("bogon_ip_v1", DatabaseFormat::Mmdb).await.expect("checksums");
 
     assert_eq!(sums.md5, "m");
     assert_eq!(sums.sha1, "s1");
@@ -160,7 +160,7 @@ async fn download_url_returns_the_redirect_rather_than_following_it() {
     let client = stub.client().build().expect("build");
 
     let url =
-        client.database().download_url("bogon_ip_v1", Format::Mmdb).await.expect("download_url");
+        client.database().download_url("bogon_ip_v1", DatabaseFormat::Mmdb).await.expect("download_url");
 
     assert_eq!(url, location);
     assert_eq!(stub.calls(), vec![DOWNLOAD], "the redirect must not be followed");
@@ -176,7 +176,7 @@ async fn the_returned_link_carries_no_credential_of_ours() {
     let client = stub.client().build().expect("build");
 
     let url =
-        client.database().download_url("bogon_ip_v1", Format::Csvgz).await.expect("download_url");
+        client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await.expect("download_url");
 
     assert!(!url.contains(KEY), "the API key came back inside the presigned link");
 }
@@ -194,7 +194,7 @@ async fn a_redirect_following_http_client_is_refused_not_obeyed() {
 
     let err = client
         .database()
-        .download_url("bogon_ip_v1", Format::Mmdb)
+        .download_url("bogon_ip_v1", DatabaseFormat::Mmdb)
         .await
         .expect_err("a followed redirect has no Location left to return");
 
