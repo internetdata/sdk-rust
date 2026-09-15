@@ -5,7 +5,7 @@
 // a reader. Mirror any README edit here.
 #![allow(unused, path_statements, clippy::no_effect)]
 
-use internetdata::{Client, ErrorKind, DatabaseFormat};
+use internetdata::{Client, DatabaseFormat, ErrorKind};
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
@@ -34,8 +34,10 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}: {}", column.name, column.r#type);
     }
 
-    let written =
-        client.database().download("bogon_ip_v1", DatabaseFormat::Csvgz, "./bogon_ip.csv.gz").await?;
+    let written = client
+        .database()
+        .download("bogon_ip_v1", DatabaseFormat::Csvgz, "./bogon_ip.csv.gz")
+        .await?;
 
     let raw = client.database().download_bytes("bogon_asn_v1", DatabaseFormat::Csvgz).await?;
 

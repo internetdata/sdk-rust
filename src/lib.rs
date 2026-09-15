@@ -66,8 +66,8 @@ use generated::models;
 // targets v2 alone.
 pub use models::database::LicenseType;
 pub use models::download::Outcome;
-pub use models::{DatabaseFormat, Standing};
 pub use models::{
     Checksums, ChecksumsResponse, Database, DatabaseMetadata, DatabaseMetadataColumn,
     DatabaseVersion, Download,
 };
+pub use models::{DatabaseFormat, Standing};

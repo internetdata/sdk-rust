@@ -100,20 +100,12 @@ fn the_outcome_readers_agree_with_the_wire() {
     ]);
 }
 
-/// The spec spells the same two formats twice, once for a version's built
-/// formats and once for a checksum's, so the crate carries two enums for it.
-/// Both are pinned, and so is the conversion between them.
+/// A version's built formats and a checksum's both `$ref` one named schema, so
+/// there is a single enum here and no cross-conversion left to pin.
 #[test]
 fn the_format_vocabulary_is_exactly_what_the_corpus_declares() {
     let expected = set(&corpus::load().formats);
     assert_eq!(spellings(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]), expected);
-    assert_eq!(spellings(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]), expected);
-
-    for (built, single) in [(DatabaseFormat::Csvgz, DatabaseFormat::Csvgz), (DatabaseFormat::Mmdb, DatabaseFormat::Mmdb)] {
-        assert_eq!(DatabaseFormat::from(built), single, "{built} does not convert to itself");
-        assert_eq!(DatabaseFormat::from(single), built, "{single} does not convert back");
-    }
-    assert_readers_match_the_wire(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
     assert_readers_match_the_wire(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
 }
 
