@@ -88,7 +88,7 @@ pub struct Catalog {
 
 impl Catalog {
     /// The versions this organization may actually download, family order.
-    pub fn licensed(&self) -> Vec<(&str, internetdata::Formats)> {
+    pub fn licensed(&self) -> Vec<(&str, internetdata::DatabaseFormat)> {
         self.databases
             .iter()
             .filter(|database| database.standing == Standing::Licensed)

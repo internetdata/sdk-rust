@@ -8,7 +8,7 @@
 // format, and that size is checked against the ceiling FIRST, so a mistaken id
 // can never quietly pull one of the gigabyte databases through CI.
 
-use internetdata::{ErrorKind, Format};
+use internetdata::{DatabaseFormat, ErrorKind};
 use internetdata_integration::{
     CEILING, Catalog, STAGING, assert_catalog_shape, catalog, client_for, recorder::Fact,
     skip_reason, skip_unless,
@@ -71,7 +71,7 @@ async fn a_database_the_organization_does_not_license_is_refused_cleanly() {
 
     let err = client
         .database()
-        .download_url(unlicensed, Format::Csvgz)
+        .download_url(unlicensed, DatabaseFormat::Csvgz)
         .await
         .unwrap_err_or_explain(unlicensed);
 
@@ -163,7 +163,7 @@ async fn the_presigned_link_works_with_no_credential_at_all() {
 
 struct Transfer {
     id: String,
-    format: Format,
+    format: DatabaseFormat,
     size: i64,
     written: u64,
     path: PathBuf,
@@ -197,9 +197,8 @@ async fn transfer() -> Option<Transfer> {
     // The SMALLEST licensed artifact, chosen from published sizes before a byte
     // moves. Mutating the ceiling to something under it proves the gate fires
     // ahead of the transfer rather than after it.
-    let mut smallest: Option<(String, Format, i64)> = None;
+    let mut smallest: Option<(String, DatabaseFormat, i64)> = None;
     for (id, format) in licensed {
-        let format = Format::from(format);
         let meta = client.database().metadata(id).await.expect("metadata");
         assert_eq!(meta.id, id, "metadata answered about the wrong database");
         let Some(&size) = meta.size.get(format.as_str()) else {

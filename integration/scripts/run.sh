@@ -39,9 +39,9 @@ KEY_SECRET="INTERNETDATA_STAGING_KEY"
 # Mirrors the requirement in Cargo.toml, which is asserted against rather than
 # parsed: the range has to be evaluated before cargo is allowed to run at all,
 # and two lines kept in agreement beat a semver parser written in bash.
-REQUIREMENT='^1.0'
-RANGE_LOW='1.0.0'
-RANGE_HIGH='2.0.0'
+REQUIREMENT='^2.0'
+RANGE_LOW='2.0.0'
+RANGE_HIGH='3.0.0'
 
 function main() {
     local published
@@ -56,6 +56,7 @@ function main() {
         return 0
     fi
     echo "==> ${CRATE} ${REQUIREMENT} matches published ${published//$'\n'/, }"
+    assertRangeIsCurrent "$published"
 
     reportKey
 
@@ -101,11 +102,36 @@ function assertNoLocalSource() {
     done
 }
 
+# The range must still admit the NEWEST release, or this suite quietly exercises
+# an obsolete client forever: it sat on ^1.0 from 2.0.0 onwards, testing 1.2.1
+# and reporting green. A major bump has to bump the range with it, and this is
+# what says so.
+function assertRangeIsCurrent() {
+    local newestInRange="${1##*$'\n'}" newestOverall
+    newestOverall="$(allPublishedVersions | sort -V | tail -1)"
+    if [ -n "$newestOverall" ] && [ "$newestInRange" != "$newestOverall" ] ; then
+        echo "==> FAILED: ${CRATE} ${newestOverall} is published but ${REQUIREMENT} admits" \
+            "only up to ${newestInRange}, so this suite would test an obsolete client." \
+            "Bump REQUIREMENT/RANGE_* here and the requirement in Cargo.toml." >&2
+        exit 1
+    fi
+}
+
+# The published versions inside the range.
+function publishedVersions() {
+    allPublishedVersions | while read -r vers ; do
+        if inRange "$vers" ; then
+            echo "$vers"
+        fi
+    done
+    return 0
+}
+
 # Every version the sparse index serves, ascending, yanked ones dropped. This is
 # the index cargo itself resolves from, so the answer is exactly what an install
 # would see. A crate that does not exist answers 404, which means the same thing
 # here as a crate with no version in range.
-function publishedVersions() {
+function allPublishedVersions() {
     local body line vers
     body="$(curl -fsS "${INDEX}/$(indexPath "$CRATE")" 2>/dev/null || true)"
     while read -r line ; do
@@ -113,7 +139,7 @@ function publishedVersions() {
             *'"yanked":true'*) continue ;;
         esac
         vers="$(printf '%s' "$line" | sed -n 's/.*"vers":"\([^"]*\)".*/\1/p')"
-        if [ -n "$vers" ] && inRange "$vers" ; then
+        if [ -n "$vers" ] ; then
             echo "$vers"
         fi
     done <<< "$body"
