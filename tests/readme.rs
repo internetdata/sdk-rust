@@ -5,6 +5,8 @@
 // a reader. Mirror any README edit here.
 #![allow(unused, path_statements, clippy::no_effect)]
 
+use std::time::Duration;
+
 use internetdata::{Client, DatabaseFormat, ErrorKind};
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,7 +17,8 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let key = std::env::var("INTERNETDATA_API_KEY")?;
-    let client = Client::builder().api_key(key).retries(4).build()?;
+    let client = Client::builder().api_key(key.clone()).retries(4).build()?;
+    let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).build()?;
 
     for database in client.database().list().await? {
         println!("{} is {}", database.base, database.standing);

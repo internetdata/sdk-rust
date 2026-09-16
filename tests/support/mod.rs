@@ -10,6 +10,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -28,6 +29,14 @@ pub struct Route {
     /// follows a redirect it should not is told the file is enormous without the
     /// test having to produce one.
     pub promised_length: Option<u64>,
+    /// Waits this long before sending anything, head included.
+    pub wait: Option<Duration>,
+    /// Writes the head and this many bytes of the body, then sends nothing more
+    /// until the client gives up, so only a deadline covering the BODY ends it.
+    pub stall_after: Option<usize>,
+    /// Writes the body a byte at a time at this pace, so no single read ever
+    /// stalls long enough for a per-read timeout to fire.
+    pub trickle: Option<Duration>,
 }
 
 impl Route {
@@ -46,6 +55,21 @@ impl Route {
 
     pub fn promising(mut self, bytes: u64) -> Self {
         self.promised_length = Some(bytes);
+        self
+    }
+
+    pub fn waiting(mut self, wait: Duration) -> Self {
+        self.wait = Some(wait);
+        self
+    }
+
+    pub fn stalling_after(mut self, bytes: usize) -> Self {
+        self.stall_after = Some(bytes);
+        self
+    }
+
+    pub fn trickling(mut self, pace: Duration) -> Self {
+        self.trickle = Some(pace);
         self
     }
 }
@@ -207,6 +231,9 @@ async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
 }
 
 async fn write_response(socket: &mut TcpStream, route: &Route) -> std::io::Result<()> {
+    if let Some(wait) = route.wait {
+        tokio::time::sleep(wait).await;
+    }
     let length = route.promised_length.unwrap_or(route.body.len() as u64);
     let mut head = format!(
         "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {length}\r\nConnection: close\r\n",
@@ -217,10 +244,30 @@ async fn write_response(socket: &mut TcpStream, route: &Route) -> std::io::Resul
     }
     head.push_str("\r\n");
     socket.write_all(head.as_bytes()).await?;
+    if let Some(bytes) = route.stall_after {
+        socket.write_all(&route.body.as_bytes()[..bytes]).await?;
+        socket.flush().await?;
+        return hold(socket).await;
+    }
+    if let Some(pace) = route.trickle {
+        for byte in route.body.as_bytes() {
+            socket.write_all(&[*byte]).await?;
+            socket.flush().await?;
+            tokio::time::sleep(pace).await;
+        }
+        return socket.shutdown().await;
+    }
     socket.write_all(route.body.as_bytes()).await?;
     socket.flush().await?;
     // A promised body that is never written would leave the client waiting for
     // the rest of it, so the connection is closed instead: whoever followed the
     // redirect gets an error, and the request is on the record either way.
     socket.shutdown().await
+}
+
+/// Sends nothing more, and returns once the client closes the connection.
+async fn hold(socket: &mut TcpStream) -> std::io::Result<()> {
+    let mut sink = [0u8; 256];
+    while socket.read(&mut sink).await? > 0 {}
+    Ok(())
 }

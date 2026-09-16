@@ -110,6 +110,8 @@ impl Error {
     pub fn message(&self) -> String {
         match self {
             Self::Api { message, .. } => message.clone(),
+            // reqwest names a timeout only in its source chain.
+            Self::Network(e) if e.is_timeout() => format!("timed out: {e}"),
             Self::Network(e) => e.to_string(),
             Self::Io(e) => e.to_string(),
             Self::Config(m) => m.clone(),

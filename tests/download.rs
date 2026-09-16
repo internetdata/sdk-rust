@@ -8,6 +8,7 @@
 mod support;
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use internetdata::{DatabaseFormat, ErrorKind};
 use support::{KEY, Route, Stub};
@@ -223,6 +224,27 @@ async fn a_transfer_that_dies_part_way_is_never_fetched_again() {
         assert!(failed.is_some(), "{method}: a short body must fail");
         assert_eq!(storage_requests(&stub), 1, "{method}: the dead transfer was fetched again");
     }
+}
+
+/// The transfer is exempt from the client's timeout: a download runs for as long
+/// as the file takes, and only one that stops moving fails. This one trickles for
+/// several times the bound.
+#[tokio::test]
+async fn a_slow_transfer_is_not_cut_off_by_the_timeout() {
+    let body = "slow,but,moving\n".repeat(4);
+    let stub = serving(Route::ok(body.clone()).trickling(Duration::from_millis(20))).await;
+    let timeout = Duration::from_millis(150);
+    let client = stub.client().retries(0).timeout(timeout).build().expect("build");
+
+    let start = Instant::now();
+    let bytes = client
+        .database()
+        .download_bytes(DATASET, DatabaseFormat::Csvgz)
+        .await
+        .expect("a slow transfer is not a stalled one");
+
+    assert_eq!(bytes, body.as_bytes());
+    assert!(start.elapsed() > timeout * 3, "the transfer was not slow");
 }
 
 fn storage_requests(stub: &Stub) -> usize {

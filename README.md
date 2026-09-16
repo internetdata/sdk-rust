@@ -40,6 +40,12 @@ Every setting has a default, and `Client::builder()` is where you change one:
 let client = Client::builder().api_key(key).retries(4).build()?;
 ```
 
+Each attempt at a request gives up after 30 seconds, and `timeout` changes that. A database download isn't bound by it, since a large one runs for minutes:
+
+```rust
+let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).build()?;
+```
+
 ### The catalog
 
 `list()` answers database FAMILIES. A licence covers the family, while a download names one of its versions, so the id you pass to `download`, `checksums` and `metadata` comes from `versions`:
@@ -136,7 +142,7 @@ Note that `RateLimited` and `QuotaExceeded` both arrive as HTTP 429 and are not 
 `rustls` is the default, so the crate builds with no system libraries at all. If you would rather link the platform's TLS, or you already depend on `reqwest` with its own defaults and want one backend rather than two:
 
 ```toml
-internetdata = { version = "1", default-features = false, features = ["native-tls"] }
+internetdata = { version = "2", default-features = false, features = ["native-tls"] }
 ```
 
 ### Calling from synchronous code

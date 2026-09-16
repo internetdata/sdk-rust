@@ -6,7 +6,7 @@ mod support;
 
 use std::time::{Duration, Instant};
 
-use internetdata::{Client, DatabaseFormat, ErrorKind, Outcome, Standing};
+use internetdata::{Client, DatabaseFormat, Error, ErrorKind, Outcome, Standing};
 use support::{KEY, Route, Stub};
 
 const LIST: &str = "/api/v2/database/list";
@@ -332,4 +332,103 @@ async fn a_trailing_slash_on_the_base_url_is_not_doubled() {
     client.database().list().await.expect("list");
 
     assert_eq!(stub.calls(), vec![LIST]);
+}
+
+/// Far below the client's 30 second read timeout, so the only bound that can
+/// end a stalled call this quickly is the whole-attempt one.
+const TIMEOUT: Duration = Duration::from_millis(300);
+
+/// A deadline that stopped at the response head would never end a body stalled
+/// after it, nor one trickled a byte at a time so that no single read stalls:
+/// the read timeout ends the first only after 30 seconds and never fires on the
+/// second.
+#[tokio::test]
+async fn the_timeout_covers_a_body_that_stalls_or_trickles() {
+    let answer = format!(r#"{{"databases":[],"pad":"{}"}}"#, "x".repeat(100));
+    for (shape, route) in [
+        ("stalled", Route::ok(answer.clone()).stalling_after(8)),
+        ("trickled", Route::ok(answer.clone()).trickling(Duration::from_millis(20))),
+    ] {
+        let stub = Stub::start([(LIST.to_owned(), route)]).await;
+        let client = stub.client().retries(0).timeout(TIMEOUT).build().expect("build");
+
+        let (err, took) = failing(client.database().list()).await;
+
+        assert_timed_out(shape, &err);
+        assert!(took >= TIMEOUT && took < TIMEOUT * 3, "{shape}: the timeout fired after {took:?}");
+    }
+}
+
+/// Every call reads the client's timeout separately, and one that forgot would
+/// still compile. The origin answers nothing for two seconds, so a call left
+/// unbounded answers late rather than failing.
+#[tokio::test]
+async fn the_timeout_bounds_every_database_call() {
+    let late = Duration::from_secs(2);
+    let stub = Stub::start([
+        (LIST.to_owned(), Route::ok(r#"{"databases":[]}"#).waiting(late)),
+        (METADATA.to_owned(), Route::ok("{}").waiting(late)),
+        (CHECKSUM.to_owned(), Route::ok("{}").waiting(late)),
+        (DOWNLOADS.to_owned(), Route::ok(r#"{"downloads":[]}"#).waiting(late)),
+        (
+            DOWNLOAD.to_owned(),
+            Route::json(302, "").header("Location", "https://s3.example/x").waiting(late),
+        ),
+    ])
+    .await;
+    let client = stub.client().retries(0).timeout(TIMEOUT).build().expect("build");
+    let database = client.database();
+
+    for (call, (err, took)) in [
+        ("list", failing(database.list()).await),
+        ("metadata", failing(database.metadata("bogon_ip_v1")).await),
+        ("checksums", failing(database.checksums("bogon_ip_v1", DatabaseFormat::Csvgz)).await),
+        ("downloads", failing(database.downloads(None)).await),
+        (
+            "download_url",
+            failing(database.download_url("bogon_ip_v1", DatabaseFormat::Csvgz)).await,
+        ),
+    ] {
+        assert_timed_out(call, &err);
+        assert!(took < late, "{call} waited {took:?}: the client's timeout never fired");
+    }
+}
+
+/// Retried like any transport failure, and each attempt gets the whole bound.
+#[tokio::test]
+async fn each_attempt_gets_the_whole_timeout() {
+    let stub =
+        Stub::start([(LIST.to_owned(), Route::ok(r#"{"databases":[]}"#).stalling_after(4))]).await;
+    let client = stub.client().retries(1).timeout(TIMEOUT).build().expect("build");
+
+    let (err, took) = failing(client.database().list()).await;
+
+    assert_eq!(stub.count(), 2, "a timed-out attempt was not retried");
+    assert_timed_out("list", &err);
+    assert!(
+        took >= TIMEOUT * 2 && took < Duration::from_secs(5),
+        "two attempts ended after {took:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_zero_timeout_is_refused_at_build() {
+    let err = Client::builder().timeout(Duration::ZERO).build().expect_err("a zero timeout built");
+    assert!(matches!(err, Error::Config(_)), "{err}");
+}
+
+/// Awaits a call that must fail, and how long it took to.
+async fn failing<T: std::fmt::Debug>(
+    call: impl Future<Output = Result<T, Error>>,
+) -> (Error, Duration) {
+    let start = Instant::now();
+    let err = call.await.expect_err("a stalled origin cannot have answered");
+    (err, start.elapsed())
+}
+
+/// A timeout is the crate's own retryable transport error, and says it timed out.
+fn assert_timed_out(call: &str, err: &Error) {
+    assert_eq!(err.kind(), ErrorKind::Network, "{call}: {err}");
+    assert!(err.retryable(), "{call}: a timeout is worth another attempt");
+    assert!(err.message().contains("timed out"), "{call}: {}", err.message());
 }

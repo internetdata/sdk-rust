@@ -25,12 +25,18 @@ impl Transport {
     }
 
     /// A JSON GET, decoded into `T`.
+    ///
+    /// `timeout` runs from connecting to the last byte of the body, which is
+    /// what reqwest's per-request timeout covers. It also takes precedence over
+    /// a total timeout on a caller-supplied client, so the bound is the SDK's
+    /// whichever client sends.
     pub(crate) async fn get_json<T: DeserializeOwned>(
         &self,
         path: &str,
         query: &[(&str, &str)],
+        timeout: Duration,
     ) -> Result<T, Error> {
-        let response = self.send(path, query).await?;
+        let response = self.send(path, query, timeout).await?;
         let status = response.status().as_u16();
         let retry_after = parse_retry_after(response.headers());
         let body = response.text().await?;
@@ -58,8 +64,9 @@ impl Transport {
         &self,
         path: &str,
         query: &[(&str, &str)],
+        timeout: Duration,
     ) -> Result<String, Error> {
-        let response = self.send(path, query).await?;
+        let response = self.send(path, query, timeout).await?;
         let status = response.status().as_u16();
         let retry_after = parse_retry_after(response.headers());
         let location = response
@@ -98,6 +105,9 @@ impl Transport {
     /// redirect policy is a CLIENT-level setting and some versions carry
     /// request headers across a redirect, so issuing the second request by hand
     /// is the only way the key provably does not travel to object storage.
+    ///
+    /// No timeout is set: a deadline over the body would cap the size of a
+    /// database, so only the client's connect and read timeouts apply.
     pub(crate) async fn get_file(&self, url: &str) -> Result<reqwest::Response, Error> {
         let response = self.http.get(url).send().await?;
         let status = response.status().as_u16();
@@ -115,9 +125,14 @@ impl Transport {
         })
     }
 
-    async fn send(&self, path: &str, query: &[(&str, &str)]) -> Result<reqwest::Response, Error> {
+    async fn send(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        timeout: Duration,
+    ) -> Result<reqwest::Response, Error> {
         let url = format!("{}{}", self.base_url, path);
-        let mut request = self.http.get(url).query(query);
+        let mut request = self.http.get(url).query(query).timeout(timeout);
         // Bearer only. The v1 endpoints take `?apikey=`, and the generated
         // client sends a configured key BOTH ways whenever one is set; a v2 key
         // belongs in one header, not in a query string a proxy will log.

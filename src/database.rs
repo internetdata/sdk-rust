@@ -101,8 +101,11 @@ impl<'a> DatabaseApi<'a> {
     pub async fn download_url(&self, id: &str, format: impl Into<Format>) -> Result<String, Error> {
         let format = format.into();
         let query = [("id", id), ("format", format.as_str())];
-        with_retry(self.client.retries(), || self.client.transport().get_redirect(DOWNLOAD, &query))
-            .await
+        let timeout = self.client.timeout();
+        with_retry(self.client.retries(), || {
+            self.client.transport().get_redirect(DOWNLOAD, &query, timeout)
+        })
+        .await
     }
 
     /// Downloads one database file to `path` and returns the bytes written.
@@ -176,7 +179,9 @@ impl<'a> DatabaseApi<'a> {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<T, Error> {
-        with_retry(self.client.retries(), || self.client.transport().get_json(path, query)).await
+        let timeout = self.client.timeout();
+        with_retry(self.client.retries(), || self.client.transport().get_json(path, query, timeout))
+            .await
     }
 }
 

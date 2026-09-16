@@ -9,6 +9,11 @@ use crate::transport::Transport;
 pub const DEFAULT_BASE_URL: &str = "https://internetdata.io";
 
 const DEFAULT_RETRIES: u32 = 2;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+// The CLIENT bounds how long we wait to connect and for the next byte, never the
+// whole transfer: a total `.timeout()` on it would also cover a database's body,
+// and a download that legitimately takes longer would abort however healthy the
+// link is. The whole-request bound is set per API request instead.
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(250);
@@ -30,6 +35,7 @@ pub struct Client(Arc<Inner>);
 struct Inner {
     transport: Transport,
     retries: u32,
+    timeout: Duration,
 }
 
 impl Client {
@@ -62,6 +68,10 @@ impl Client {
     pub(crate) fn retries(&self) -> u32 {
         self.0.retries
     }
+
+    pub(crate) fn timeout(&self) -> Duration {
+        self.0.timeout
+    }
 }
 
 /// Builds a [`Client`]. With nothing set it talks to production with no key,
@@ -71,6 +81,7 @@ pub struct ClientBuilder {
     api_key: Option<String>,
     base_url: Option<String>,
     retries: Option<u32>,
+    timeout: Option<Duration>,
     http_client: Option<reqwest::Client>,
 }
 
@@ -104,7 +115,19 @@ impl ClientBuilder {
         self
     }
 
-    /// The HTTP client to send with, for a custom transport, proxy or timeout.
+    /// How long one attempt at an API request may take, from connecting to the
+    /// last byte of the answer. Default 30 seconds.
+    ///
+    /// Per ATTEMPT, so a call that is retried can take longer in total. A
+    /// database transfer is exempt: a download runs for as long as the file
+    /// takes, and only a connection that stops moving fails it. A request that
+    /// runs out of time is an [`Error::Network`], which is retryable.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// The HTTP client to send with, for a custom transport or proxy.
     ///
     /// **Build it with [`reqwest::redirect::Policy::none`].** reqwest follows
     /// redirects by default and its policy is a client-level setting with no
@@ -114,17 +137,22 @@ impl ClientBuilder {
     /// the request has been spent.
     ///
     /// **And do not put a total [`reqwest::ClientBuilder::timeout`] on it.**
-    /// That deadline covers the response BODY, so it caps how large a database
-    /// this client can fetch: at 30 seconds a 5 GiB transfer cannot finish
-    /// however healthy the connection is. The default client sets a connect
-    /// timeout and a read (inactivity) timeout instead, which fail a stalled
-    /// transfer without failing a slow one.
+    /// API requests carry [`ClientBuilder::timeout`] whichever client sends
+    /// them, but a database transfer carries none, so a total timeout here caps
+    /// how large a database this client can fetch: at 30 seconds a 5 GiB
+    /// transfer cannot finish however healthy the connection is. The default
+    /// client sets a connect timeout and a read (inactivity) timeout instead,
+    /// which fail a stalled transfer without failing a slow one.
     pub fn http_client(mut self, client: reqwest::Client) -> Self {
         self.http_client = Some(client);
         self
     }
 
     pub fn build(self) -> Result<Client, Error> {
+        let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
+        if timeout.is_zero() {
+            return Err(Error::Config("timeout must be positive".to_owned()));
+        }
         let base_url = self.base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_owned());
         let parsed = reqwest::Url::parse(&base_url)
             .map_err(|e| Error::Config(format!("base url {base_url:?}: {e}")))?;
@@ -136,11 +164,6 @@ impl ClientBuilder {
             Some(client) => client,
             None => reqwest::Client::builder()
                 .user_agent(concat!("internetdata-rust/", env!("CARGO_PKG_VERSION")))
-                // A total request timeout would cap the SIZE of a database this
-                // client can fetch, because it covers the body as well as the
-                // response head. These two fail a connection that will not open
-                // and a transfer that has stopped moving, and leave a healthy
-                // multi-gigabyte download alone.
                 .connect_timeout(DEFAULT_CONNECT_TIMEOUT)
                 .read_timeout(DEFAULT_READ_TIMEOUT)
                 // The download endpoint answers 302 to object storage and the
@@ -158,6 +181,7 @@ impl ClientBuilder {
                 self.api_key.filter(|key| !key.is_empty()),
             ),
             retries: self.retries.unwrap_or(DEFAULT_RETRIES),
+            timeout,
         })))
     }
 }
