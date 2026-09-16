@@ -8,7 +8,7 @@
 // request count rather than by waiting for the transfer.
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -71,6 +71,7 @@ impl Call {
 #[derive(Default)]
 struct State {
     routes: HashMap<String, Route>,
+    sequences: HashMap<String, VecDeque<Route>>,
     calls: Vec<Call>,
 }
 
@@ -107,6 +108,13 @@ impl Stub {
     /// stub's own address.
     pub fn route(&self, path: impl Into<String>, route: Route) {
         self.state.lock().unwrap().routes.insert(path.into(), route);
+    }
+
+    /// Answers a path with these responses in order, ahead of any route. Once
+    /// they run out every further request there is a 599, so an extra attempt
+    /// is counted and fails rather than picking up an answer meant for another.
+    pub fn sequence(&self, path: impl Into<String>, routes: impl IntoIterator<Item = Route>) {
+        self.state.lock().unwrap().sequences.insert(path.into(), routes.into_iter().collect());
     }
 
     /// A builder already pointed at this stub and carrying a key, which is what
@@ -155,7 +163,12 @@ async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Resu
     let route = {
         let mut state = state.lock().unwrap();
         state.calls.push(call);
-        state.routes.get(&path).cloned()
+        match state.sequences.get_mut(&path) {
+            Some(queue) => Some(
+                queue.pop_front().unwrap_or_else(|| Route::json(599, r#"{"stub":"exhausted"}"#)),
+            ),
+            None => state.routes.get(&path).cloned(),
+        }
     };
 
     // An unrouted path gets what the real API gives an unknown database, so a
