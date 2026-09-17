@@ -209,8 +209,9 @@ function cargoRun() {
         return 0
     fi
     # Both caches live in named docker VOLUMES rather than in the working tree,
-    # so neither target/ nor a registry checkout can end up in a commit. The key
-    # uses docker's BARE -e form, which forwards it only when it is set.
+    # so neither target/ nor a registry checkout can end up in a commit, and the
+    # build settings are ../scripts/cargo.sh's. The key uses docker's BARE -e
+    # form, which forwards it only when it is set.
     docker run --rm -i \
         -v "$PWD:/work" \
         -v internetdata-rust-integration-target:/target \
@@ -218,6 +219,8 @@ function cargoRun() {
         -e CARGO_TARGET_DIR=/target \
         -e CARGO_HOME=/cargo \
         -e CARGO_TERM_COLOR=never \
+        -e CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}" \
+        -e CARGO_PROFILE_DEV_DEBUG="${CARGO_PROFILE_DEV_DEBUG:-line-tables-only}" \
         -e "$KEY_SECRET" \
         -w /work "$RUST_IMAGE" cargo "$@"
 }
