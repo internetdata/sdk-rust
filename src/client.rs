@@ -42,7 +42,7 @@ impl Client {
     /// A client against production with no key, which sends no `Authorization`
     /// header at all. Every endpoint published today needs one, so reach for
     /// [`Client::builder`] and [`ClientBuilder::api_key`] instead unless you are
-    /// after a database served without a licence.
+    /// after a database served without a license.
     pub fn new() -> Result<Self, Error> {
         Self::builder().build()
     }

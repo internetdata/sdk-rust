@@ -97,7 +97,7 @@ impl Catalog {
             .collect()
     }
 
-    /// A published database this organization holds no licence for, discovered
+    /// A published database this organization holds no license for, discovered
     /// rather than named: hard-coding one goes stale the day it is bought, and
     /// `standing` is the field that answers this question anyway.
     pub fn unlicensed(&self) -> Option<&str> {
@@ -150,7 +150,7 @@ pub fn assert_catalog_shape(catalog: &Catalog) {
             "the decode reordered the listing, so nothing below lines up"
         );
 
-        // A licence covers the FAMILY and a download names one of its versions,
+        // A license covers the FAMILY and a download names one of its versions,
         // so this list is what makes list -> download possible at all. The
         // VPNDetection spec claimed `{id, formats}` on the family until it was
         // corrected, which broke that path in every SDK.
@@ -161,7 +161,7 @@ pub fn assert_catalog_shape(catalog: &Catalog) {
         }
 
         // Presence follows the standing: an unlicensed family has no terms
-        // because there is no licence to state them.
+        // because there is no license to state them.
         match family.standing {
             Standing::Unlicensed => {
                 assert!(

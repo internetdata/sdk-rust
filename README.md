@@ -18,7 +18,7 @@ Requires Rust 1.85 or newer. Everything is `async` and runs on tokio.
 
 ## Usage
 
-Every database published today needs an API key carrying the `db.download` scope. Create one in the console, then pass it in. `api_key` is optional on the builder - leave it out and no `Authorization` header is sent at all, ready for a database served without a licence:
+Every database published today needs an API key carrying the `db.download` scope. Create one in the console, then pass it in. `api_key` is optional on the builder - leave it out and no `Authorization` header is sent at all, ready for a database served without a license:
 
 ```rust
 use internetdata::Client;
@@ -48,7 +48,7 @@ let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).buil
 
 ### The catalog
 
-`list()` answers database FAMILIES. A licence covers the family, while a download names one of its versions, so the id you pass to `download`, `checksums` and `metadata` comes from `versions`:
+`list()` answers database FAMILIES. A license covers the family, while a download names one of its versions, so the id you pass to `download`, `checksums` and `metadata` comes from `versions`:
 
 ```rust
 for database in client.database().list().await? {
@@ -60,7 +60,7 @@ for database in client.database().list().await? {
 }
 ```
 
-`standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `license_type` says what your licence lets you do with the data, and is `None` when there is no licence.
+`standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `license_type` says what your license lets you do with the data, and is `None` when there is no license.
 
 ### What is inside a database
 

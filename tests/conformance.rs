@@ -188,7 +188,7 @@ async fn a_listing_is_never_reused_across_clients() {
     assert_eq!(stub.count(), 2, "the second client did not ask for its own listing");
 }
 
-/// One family, shaped exactly as the API serves it: a licence held against the
+/// One family, shaped exactly as the API serves it: a license held against the
 /// FAMILY, and the ids a download takes one level down in `versions`.
 fn listing(bases: &[&str]) -> String {
     let databases: Vec<Value> = bases

@@ -35,7 +35,7 @@ impl<'a> DatabaseApi<'a> {
     /// stands: `licensed`, `expired`, or `unlicensed` for one published but
     /// never bought.
     ///
-    /// A licence covers a family while a download names one of its versions, so
+    /// A license covers a family while a download names one of its versions, so
     /// the ids [`DatabaseApi::download`] and [`DatabaseApi::checksums`] take come from
     /// [`Database::versions`] rather than from the family itself.
     ///

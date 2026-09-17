@@ -77,7 +77,7 @@ async fn a_database_the_organization_does_not_license_is_refused_cleanly() {
 
     assert_eq!(err.kind(), ErrorKind::Forbidden, "kind: {err}");
     assert_eq!(err.status(), Some(403));
-    assert!(!err.retryable(), "a licence refusal is not worth retrying");
+    assert!(!err.retryable(), "a license refusal is not worth retrying");
     // The API says which refusal this is (`{"rc":"NOT_LICENSED"}`). Falling back
     // to the status means the client never read the envelope.
     assert!(
@@ -173,7 +173,7 @@ struct Transfer {
 
 /// Memoized so every transfer test shares one download rather than pulling the
 /// database again each time. `None` when nothing licensed fits under the
-/// ceiling, which is a deliberate licence change rather than a bug, so it skips
+/// ceiling, which is a deliberate license change rather than a bug, so it skips
 /// with a reason instead of failing.
 static TRANSFER: OnceCell<Option<Transfer>> = OnceCell::const_new();
 
@@ -190,7 +190,7 @@ async fn transfer() -> Option<Transfer> {
     let catalog = catalog().await;
 
     let licensed = catalog.licensed();
-    // An empty set is a broken credential rather than a licence decision: this
+    // An empty set is a broken credential rather than a license decision: this
     // key exists to download something.
     assert!(!licensed.is_empty(), "this key licenses nothing, so there is nothing to download");
 
@@ -266,7 +266,7 @@ impl<T> ExplainRefusal for Result<T, internetdata::Error> {
             Err(err) => err,
             Ok(_) => panic!(
                 "{id} was not refused, though the catalog lists it as unlicensed. Either the \
-                 licence changed under this run or `standing` and the download gate disagree"
+                 license changed under this run or `standing` and the download gate disagree"
             ),
         }
     }

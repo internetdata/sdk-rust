@@ -15,7 +15,7 @@ const CHECKSUM: &str = "/api/v2/database/checksum";
 const DOWNLOADS: &str = "/api/v2/database/downloads";
 const DOWNLOAD: &str = "/api/v2/database/download";
 
-/// A licence is held against a FAMILY, and the ids a download takes are one
+/// A license is held against a FAMILY, and the ids a download takes are one
 /// level further down. Reading `{id, formats}` off the family is how list ->
 /// download broke in every VPNDetection SDK, so the depth is pinned here.
 #[tokio::test]
@@ -35,7 +35,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     let family = &databases[0];
     assert_eq!(family.base, "bogon_ip");
     assert_eq!(family.standing, Standing::Licensed);
-    assert!(family.expires.is_none(), "a licence with no end date reads as None");
+    assert!(family.expires.is_none(), "a license with no end date reads as None");
     assert!(family.starts.is_some(), "starts is present and non-null here");
     let version = &family.versions[0];
     assert_eq!(version.id, "bogon_ip_v1", "the id a download takes lives on the VERSION");
@@ -286,7 +286,7 @@ async fn the_key_travels_as_a_bearer_token_and_not_in_the_query_string() {
 
 /// Today every endpoint is licensed, so a keyless client only ever gets a 401.
 /// It still has to BUILD and to send no credential at all, because a database
-/// offered without a licence would need exactly this client. The empty arm is
+/// offered without a license would need exactly this client. The empty arm is
 /// what an unset `${{ secrets.X }}` interpolates to, where `Bearer ` with
 /// nothing behind it is a worse answer than no header.
 #[tokio::test]
