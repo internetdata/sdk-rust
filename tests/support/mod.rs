@@ -10,7 +10,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -18,6 +18,7 @@ use tokio::net::{TcpListener, TcpStream};
 use internetdata::{Client, ClientBuilder};
 
 pub mod corpus;
+pub mod oauth;
 
 /// A response the stub is prepared to give for one path.
 #[derive(Clone, Default)]
@@ -79,8 +80,13 @@ impl Route {
 /// that was never sent is invisible to any assertion made on the response.
 #[derive(Clone, Debug)]
 pub struct Call {
+    pub method: String,
     pub path: String,
     pub headers: Vec<(String, String)>,
+    /// The request body, empty for a GET.
+    pub body: String,
+    /// When the request finished arriving, for measuring the gap between two.
+    pub at: Instant,
 }
 
 impl Call {
@@ -177,6 +183,10 @@ impl Stub {
 /// Recognizable in a failure, and obviously not a real credential.
 pub const KEY: &str = "test-api-key-never-real";
 
+/// Past this many requests the stub answers nothing at all, so a client caught
+/// in a loop fails its test's own time limit instead of growing without bound.
+pub const REQUEST_BOUND: usize = 64;
+
 async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Result<()> {
     let call = match read_request(&mut socket).await? {
         Some(call) => call,
@@ -184,9 +194,16 @@ async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Resu
     };
     let path = call.path.clone();
 
-    let route = {
+    let over_bound = {
         let mut state = state.lock().unwrap();
         state.calls.push(call);
+        state.calls.len() > REQUEST_BOUND
+    };
+    if over_bound {
+        return hold(&mut socket).await;
+    }
+    let route = {
+        let mut state = state.lock().unwrap();
         match state.sequences.get_mut(&path) {
             Some(queue) => Some(
                 queue.pop_front().unwrap_or_else(|| Route::json(599, r#"{"stub":"exhausted"}"#)),
@@ -201,10 +218,10 @@ async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Resu
     write_response(&mut socket, &route).await
 }
 
-/// The request line and its headers. The path is stripped of any query string,
-/// which is the key routes are held under; the full target is kept in the
-/// synthetic `x-stub-target` header, so an assertion about a credential in a
-/// query string has something to read.
+/// The request line, its headers and any body. The path is stripped of any
+/// query string, which is the key routes are held under; the full target is
+/// kept in the synthetic `x-stub-target` header, so an assertion about a
+/// credential in a query string has something to read.
 async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
     let mut request = Vec::new();
     let mut byte = [0u8; 1];
@@ -216,7 +233,8 @@ async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
     }
     let text = String::from_utf8_lossy(&request);
     let mut lines = text.lines();
-    let Some(target) = lines.next().and_then(|line| line.split_whitespace().nth(1)) else {
+    let mut request_line = lines.next().unwrap_or_default().split_whitespace();
+    let (Some(method), Some(target)) = (request_line.next(), request_line.next()) else {
         return Ok(None);
     };
 
@@ -227,7 +245,23 @@ async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
         }
     }
     let path = target.split('?').next().unwrap_or(target).to_owned();
-    Ok(Some(Call { path, headers }))
+    // A POST carries its body after the blank line, sized by Content-Length.
+    let length = headers
+        .iter()
+        .find(|(name, _)| name == "content-length")
+        .and_then(|(_, value)| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let mut body = vec![0u8; length];
+    if length > 0 {
+        socket.read_exact(&mut body).await?;
+    }
+    Ok(Some(Call {
+        method: method.to_owned(),
+        path,
+        headers,
+        body: String::from_utf8_lossy(&body).into_owned(),
+        at: Instant::now(),
+    }))
 }
 
 async fn write_response(socket: &mut TcpStream, route: &Route) -> std::io::Result<()> {

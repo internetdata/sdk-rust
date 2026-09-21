@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::database::DatabaseApi;
 use crate::error::Error;
+use crate::oauth::{OauthApi, OauthError};
 use crate::transport::Transport;
 
 /// The production API. Override it with [`ClientBuilder::base_url`].
@@ -51,14 +52,20 @@ impl Client {
         ClientBuilder::default()
     }
 
-    /// The database catalog and its downloads, which is every call this API
-    /// serves.
+    /// The database catalog and its downloads.
     ///
     /// They hang off here rather than off the client itself, which is where the
     /// sibling VPNDetection crate keeps the same calls, so one program holding
     /// both spells the two the same way.
     pub fn database(&self) -> DatabaseApi<'_> {
         DatabaseApi::new(self)
+    }
+
+    /// Signing a person in with the OAuth device flow, so a program on their
+    /// own machine can be handed one of their API keys. These requests never
+    /// carry this client's API key, so a client built without one works.
+    pub fn oauth(&self) -> OauthApi<'_> {
+        OauthApi::new(self)
     }
 
     pub(crate) fn transport(&self) -> &Transport {
@@ -189,10 +196,11 @@ impl ClientBuilder {
 /// Backs off exponentially, except that a server-supplied `Retry-After` wins
 /// over the schedule. A 429 WITHOUT that header is a spent allowance rather than
 /// a throttle and is not retried at all, which [`Error::retryable`] decides.
-pub(crate) async fn with_retry<T, F, Fut>(retries: u32, mut attempt: F) -> Result<T, Error>
+pub(crate) async fn with_retry<T, E, F, Fut>(retries: u32, mut attempt: F) -> Result<T, E>
 where
+    E: Retry,
     F: FnMut() -> Fut,
-    Fut: Future<Output = Result<T, Error>>,
+    Fut: Future<Output = Result<T, E>>,
 {
     let mut delay = RETRY_BASE_DELAY;
     let mut remaining = retries;
@@ -206,5 +214,32 @@ where
                 remaining -= 1;
             }
         }
+    }
+}
+
+/// What [`with_retry`] asks of a failure, so the OAuth calls retry by the same
+/// rules without folding their refusals into [`Error`].
+pub(crate) trait Retry {
+    fn retryable(&self) -> bool;
+    fn retry_after(&self) -> Option<Duration>;
+}
+
+impl Retry for Error {
+    fn retryable(&self) -> bool {
+        Error::retryable(self)
+    }
+
+    fn retry_after(&self) -> Option<Duration> {
+        Error::retry_after(self)
+    }
+}
+
+impl Retry for OauthError {
+    fn retryable(&self) -> bool {
+        OauthError::retryable(self)
+    }
+
+    fn retry_after(&self) -> Option<Duration> {
+        OauthError::retry_after(self)
     }
 }

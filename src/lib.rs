@@ -6,8 +6,9 @@
 //! scope. Every database published today is licensed, so a keyless client is
 //! answered `401` - the key is nevertheless OPTIONAL, and a client built without
 //! one sends no `Authorization` header at all. There is no per-address lookup
-//! here: the whole API is the database catalog and the files behind it, reached
-//! through [`Client::database`].
+//! here: the database catalog and the files behind it are reached through
+//! [`Client::database`], and the OAuth device-flow sign-in through
+//! [`Client::oauth`].
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), internetdata::Error> {
@@ -52,18 +53,26 @@ mod database;
 mod enums;
 mod error;
 mod generated;
+mod oauth;
 mod transport;
+
+// The OAuth unit tests reuse the integration suite's stub, which names this
+// crate from outside.
+#[cfg(test)]
+extern crate self as internetdata;
 
 pub use client::{Client, ClientBuilder, DEFAULT_BASE_URL};
 pub use database::DatabaseApi;
 pub use error::{Error, ErrorKind};
+pub use oauth::{
+    DeviceAuthorization, DeviceAuthorizationOptions, OauthApi, OauthError, OauthErrorResponse,
+    OauthMetadata, OauthOptions, TokenResponse,
+};
 
 use generated::models;
 
 // The v2 wire types, re-exported from the generated models so a consumer never
-// names the module path. The spec still describes the legacy v1 endpoints and
-// their schemas are generated too; they are not re-exported, because this crate
-// targets v2 alone.
+// names the module path.
 pub use models::database::LicenseType;
 pub use models::download::Outcome;
 pub use models::{

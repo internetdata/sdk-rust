@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use internetdata::{Client, DatabaseFormat, ErrorKind};
+use internetdata::{Client, DatabaseFormat, DeviceAuthorizationOptions, ErrorKind, OauthError};
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
@@ -73,6 +73,26 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
         ErrorKind::Network,
         ErrorKind::Io,
     ];
+    Ok(())
+}
+
+async fn oauth_snippet() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new()?;
+    let scope = DeviceAuthorizationOptions::new().scope("account.read apikeys.read apikeys.reveal");
+    let device = client.oauth().device_authorization_with("your-client-id", scope).await?;
+    println!("Open {} and enter {}", device.verification_uri, device.user_code);
+
+    let token = client.oauth().poll_device_token("your-client-id", &device).await?;
+    let refresh_token = token.refresh_token.clone().unwrap_or_default();
+    let Some(apikey) = token.apikey else {
+        return Err("no API key came back: none was picked, or it cannot be shown again".into());
+    };
+    let keyed = Client::builder().api_key(apikey).build()?;
+
+    match client.oauth().revoke("your-client-id", &refresh_token).await {
+        Err(OauthError::AccessDenied(_)) | Err(OauthError::ExpiredToken(_)) => {}
+        _ => {}
+    }
     Ok(())
 }
 

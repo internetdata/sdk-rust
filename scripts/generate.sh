@@ -24,12 +24,13 @@
 # and neither runs a pre-build step, so a gitignored client would ship a crate
 # that cannot compile itself.
 #
-# The spec still carries the v1 endpoints, so their models are generated too and
-# are dead code here. They are left in rather than filtered out: a filter list is
-# one more thing to update when the spec grows, and the alternative - stripping
-# paths out of the pinned spec - would make the committed copy something other
-# than what the published one says. src/generated/mod.rs allows dead_code for
-# exactly this, and lib.rs re-exports the v2 models only.
+# Only the models the hand-written layer uses are generated, selected by name.
+# The pinned spec is the whole published document, so it also describes v1, IAM
+# and OAuth: v1 and IAM are not wrapped, and the OAuth accessor, like the
+# VPNDetection crate's, hand-writes its three types. Generated, all of them would
+# be dead code, and IAM's would need the uuid and serde_with crates, which
+# nothing else here uses. Filtering the pinned spec instead would make the
+# committed copy something other than what was published.
 
 set -euo pipefail
 
@@ -39,12 +40,9 @@ GENERATOR_IMAGE="${GENERATOR_IMAGE:-openapitools/openapi-generator-cli:v7.25.0}"
 
 PROPS="packageName=internetdata,supportAsync=true,hideGenerationTimestamp=true"
 
-# `Error` is the API's `{rc}` envelope. Left alone it generates a model named
-# Error, which is the name this crate's own failure type holds, so the two would
-# collide the moment both are re-exported. `DbChecksums` keeps a `Db` prefix
-# from a schema shared with v1; in a crate that is only a database client it is
-# noise.
-MODELS="Error=ErrorEnvelope,DbChecksums=Checksums"
+# `DbChecksums` keeps a `Db` prefix from a schema shared with v1; in a crate that
+# is only a database client it is noise.
+MODELS="DbChecksums=Checksums"
 
 # The three wrapper schemas are inline in the spec, so the generator names them
 # after the operation and status code (databaseChecksumV2_200_response).
@@ -54,6 +52,14 @@ MODELS="Error=ErrorEnvelope,DbChecksums=Checksums"
 NAMES="listDatabases_200_response=DatabaseList"
 NAMES="${NAMES},listDownloads_200_response=DownloadList"
 NAMES="${NAMES},databaseChecksumV2_200_response=ChecksumsResponse"
+
+# What lib.rs re-exports, and every schema those reference: the list does NOT
+# follow a $ref, so a model left off it is simply not generated and the build
+# fails on its name. A schema is named as the SPEC names it, or by its mapped
+# name when it is one of the inline wrappers above.
+SELECTED="Database:DatabaseVersion:DatabaseFormat:Standing:Download"
+SELECTED="${SELECTED}:DatabaseMetadata:DatabaseMetadataColumn:DbChecksums"
+SELECTED="${SELECTED}:DatabaseList:DownloadList:ChecksumsResponse"
 
 rm -rf .gen
 mkdir -p .gen
@@ -65,7 +71,8 @@ docker run --rm \
     -i /spec/openapi.yaml \
     -g rust --library reqwest \
     -o /out \
-    --global-property models,supportingFiles,modelDocs=false,modelTests=false \
+    --global-property "models=${SELECTED}" \
+    --global-property supportingFiles,modelDocs=false,modelTests=false \
     --model-name-mappings "$MODELS" \
     --inline-schema-name-mappings "$NAMES" \
     --additional-properties="$PROPS" \

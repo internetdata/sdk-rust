@@ -32,7 +32,7 @@ for database in client.database().list().await? {
 }
 ```
 
-Every call hangs off `client.database()`, which is the whole of this API and is where the sibling VPNDetection crate keeps the same seven calls.
+The database calls hang off `client.database()`, which is where the sibling VPNDetection crate keeps the same seven.
 
 Every setting has a default, and `Client::builder()` is where you change one:
 
@@ -154,6 +154,27 @@ let runtime = tokio::runtime::Runtime::new()?;
 let client = Client::builder().api_key(key).build()?;
 let databases = runtime.block_on(client.database().list())?;
 ```
+
+### Sign in with OAuth (device flow)
+
+A program running on the person's own machine can let them sign in with a browser and pick one of their API keys, instead of asking them to paste it:
+
+```rust
+use internetdata::{Client, DeviceAuthorizationOptions};
+
+let client = Client::new()?;
+let scope = DeviceAuthorizationOptions::new().scope("account.read apikeys.read apikeys.reveal");
+let device = client.oauth().device_authorization_with("your-client-id", scope).await?;
+println!("Open {} and enter {}", device.verification_uri, device.user_code);
+
+let token = client.oauth().poll_device_token("your-client-id", &device).await?;
+let Some(apikey) = token.apikey else {
+    return Err("no API key came back: none was picked, or it cannot be shown again".into());
+};
+let keyed = Client::builder().api_key(apikey).build()?;
+```
+
+A denied sign-in fails with `OauthError::AccessDenied` and a code that ran out with `OauthError::ExpiredToken`. Client IDs are issued on request from support@internetdata.io, and `client.oauth().revoke("your-client-id", &refresh_token)` signs the machine out again.
 
 ## Other Libraries
 
