@@ -21,15 +21,6 @@
 //! # }
 //! ```
 //!
-//! # Your catalog is not everyone's catalog
-//!
-//! A database commissioned for a single customer is ABSENT from
-//! [`DatabaseApi::list`] for an organization that does not license it, rather
-//! than present with an [`Standing::Unlicensed`] standing. The server decides what
-//! you may see, so treat the listing as this key's answer: do not build a
-//! catalog from any other source, and do not reuse one organization's listing
-//! for another key.
-//!
 //! # Async only
 //!
 //! Everything here is `async` on tokio, and there is no blocking facade.

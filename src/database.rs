@@ -39,12 +39,8 @@ impl<'a> DatabaseApi<'a> {
     /// the ids [`DatabaseApi::download`] and [`DatabaseApi::checksums`] take come from
     /// [`Database::versions`] rather than from the family itself.
     ///
-    /// **This listing is yours, not everyone's.** A database commissioned for a
-    /// single customer is ABSENT from it entirely for an organization that does
-    /// not license it, rather than present with an `unlicensed` standing. The
-    /// server decides that, so do not reconstruct a catalog from anywhere else,
-    /// do not reuse one organization's listing for another key, and do not treat
-    /// what you see as the whole published catalog.
+    /// This is the server's answer for this key, so a listing held from one key
+    /// is not an answer for another.
     pub async fn list(&self) -> Result<Vec<Database>, Error> {
         let response: DatabaseList = self.get(LIST, &[]).await?;
         Ok(response.databases)
