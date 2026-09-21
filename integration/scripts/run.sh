@@ -14,9 +14,9 @@
 #      first release there is no artifact to test, and unlike an interpreted
 #      language a Rust test naming a method that version does not have will not
 #      COMPILE, so this gate has to cover the whole suite rather than one test.
-#   2. The staging key is missing or EMPTY, in which case the suite skips from
-#      inside itself so the reason lands in the test output rather than only
-#      here.
+#   2. The staging key is missing or EMPTY, in which case the database tests
+#      skip from inside the suite so the reason lands in the test output rather
+#      than only here. The OAuth checks carry no key and run regardless.
 #
 # There is deliberately NO local-source escape hatch. A path dependency or a
 # [patch] entry is refused outright, because a suite pointed at the working tree
@@ -39,8 +39,8 @@ KEY_SECRET="INTERNETDATA_STAGING_KEY"
 # Mirrors the requirement in Cargo.toml, which is asserted against rather than
 # parsed: the range has to be evaluated before cargo is allowed to run at all,
 # and two lines kept in agreement beat a semver parser written in bash.
-REQUIREMENT='^2.0'
-RANGE_LOW='2.0.0'
+REQUIREMENT='^2.2'
+RANGE_LOW='2.2.0'
 RANGE_HIGH='3.0.0'
 
 function main() {
@@ -198,7 +198,7 @@ function reportKey() {
     if [ -n "${!KEY_SECRET:-}" ] ; then
         echo "==> ${KEY_SECRET} is set"
     else
-        notice "no ${KEY_SECRET}: the suite skips from inside itself"
+        notice "no ${KEY_SECRET}: the database tests skip from inside the suite, the OAuth checks run"
     fi
 }
 
