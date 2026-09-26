@@ -204,6 +204,51 @@ async fn an_object_storage_5xx_before_the_first_byte_is_retried() {
     assert_eq!(std::fs::read(&path).expect("reading the download back"), payload().as_bytes());
 }
 
+/// Object storage's `Retry-After` is bounded like the API's: past 2^31 - 1 ms
+/// it is waited out on the backoff, where 2147484 held a transfer for 24.8 days
+/// and 9223372036854775807 or a year-9999 date for good (2.2.1).
+#[tokio::test]
+async fn an_object_storage_retry_after_past_its_bound_waits_the_backoff() {
+    for value in ["2147484", "9223372036854775807", "Fri, 31 Dec 9999 23:59:59 GMT"] {
+        let stub = serving(Route::ok(payload())).await;
+        stub.sequence(
+            STORAGE_PATH,
+            [Route::json(429, "").header("Retry-After", value), Route::ok(payload())],
+        );
+        let client = stub.client().build().expect("build");
+
+        let database = client.database();
+        let download = database.download_bytes(DATASET, DatabaseFormat::Csvgz);
+        let bytes = tokio::time::timeout(Duration::from_secs(5), download)
+            .await
+            .unwrap_or_else(|_| panic!("Retry-After {value} held the transfer"))
+            .unwrap_or_else(|e| panic!("Retry-After {value}: {e}"));
+
+        assert_eq!(bytes, payload().as_bytes(), "Retry-After {value}");
+        assert_eq!(storage_requests(&stub), 2, "Retry-After {value}");
+    }
+}
+
+/// The declared length is the server's word, so it sizes nothing unchecked: a
+/// `Content-Length` of 2^62 aborted the whole process in `Vec::with_capacity`
+/// before a byte arrived (2.2.1). The call fails instead, naming `download`.
+#[tokio::test]
+async fn download_bytes_fails_a_length_no_process_can_hold() {
+    let stub = serving(Route::ok("").promising(1 << 62)).await;
+    let client = stub.client().build().expect("build");
+
+    let err = client
+        .database()
+        .download_bytes(DATASET, DatabaseFormat::Csvgz)
+        .await
+        .expect_err("a 4 EiB buffer cannot be held");
+
+    assert_eq!(err.kind(), ErrorKind::Io, "{err}");
+    assert!(!err.retryable(), "{err}");
+    assert!(err.message().contains("DatabaseApi::download"), "{err}");
+    assert_eq!(storage_requests(&stub), 1);
+}
+
 /// A body that dies part way is NEVER fetched again: a second copy would land
 /// behind the bytes already moved. Paired with the 503 test above, so neither
 /// count can pass by accident.

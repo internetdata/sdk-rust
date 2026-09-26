@@ -298,6 +298,79 @@ async fn the_poll_waits_on_the_real_clock() {
     assert_eq!(token.access_token, "mo_at_poll");
 }
 
+/// The time left is rarely whole seconds here, so a sleep dropping the fraction
+/// polls again short of the deadline, and only such a poll reaches the approval.
+/// Every corpus case replaces the sleep, so only the real clock catches it.
+#[tokio::test]
+async fn the_poll_sleeps_the_fraction_left_before_its_deadline() {
+    let stub = Stub::start([]).await;
+    stub.sequence(
+        "/oauth/token",
+        [
+            Route::json(400, r#"{"error":"authorization_pending"}"#),
+            Route::ok(EVERY_REQUIRED_MEMBER),
+        ],
+    );
+    let client = stub.anonymous().build().expect("build");
+    let device: DeviceAuthorization = serde_json::from_value(serde_json::json!({
+        "device_code": "mo_dc_x", "user_code": "BCDF-GHJK",
+        "verification_uri": "https://app.example.test/device", "expires_in": 2, "interval": 1,
+    }))
+    .expect("device");
+
+    let start = Instant::now();
+    let err = client.oauth().poll_device_token(CLIENT_ID, &device).await.expect_err("expired");
+    let settled = start.elapsed();
+
+    assert_eq!(stub.count(), 1, "polled again before the deadline");
+    assert!(matches!(err, OauthError::ExpiredToken(ref e) if e.status.is_none()), "{err:?}");
+    assert!(settled >= Duration::from_millis(1950), "expired before its deadline: {settled:?}");
+    assert!(settled < Duration::from_millis(3500), "{settled:?}");
+}
+
+/// No attempt can meet a zero timeout, so every OAuth call refuses it before
+/// any request, the poll before its first wait rather than an interval later.
+#[tokio::test]
+async fn a_zero_oauth_timeout_is_refused_before_any_request() {
+    let stub = Stub::start(every_path(Route::ok(EVERY_REQUIRED_MEMBER))).await;
+    let client = stub.anonymous().build().expect("build");
+    let oauth = client.oauth();
+    let zero = || OauthOptions::new().timeout(Duration::ZERO);
+    let device = device(5);
+
+    let start = Instant::now();
+    for (call, answer) in [
+        ("metadata", oauth.metadata_with(zero()).await.map(drop)),
+        (
+            "device_authorization",
+            oauth
+                .device_authorization_with(
+                    CLIENT_ID,
+                    DeviceAuthorizationOptions::new().timeout(Duration::ZERO),
+                )
+                .await
+                .map(drop),
+        ),
+        (
+            "exchange_device_code",
+            oauth.exchange_device_code_with(CLIENT_ID, "mo_dc_x", zero()).await.map(drop),
+        ),
+        (
+            "exchange_refresh_token",
+            oauth.exchange_refresh_token_with(CLIENT_ID, "mo_rt_x", zero()).await.map(drop),
+        ),
+        ("revoke", oauth.revoke_with(CLIENT_ID, "mo_rt_x", zero()).await),
+        ("poll", oauth.poll_device_token_with(CLIENT_ID, &device, zero()).await.map(drop)),
+    ] {
+        match answer {
+            Err(OauthError::Client(err)) => assert_eq!(err.kind(), ErrorKind::BadRequest, "{call}"),
+            other => panic!("{call}: {other:?}"),
+        }
+    }
+    assert!(start.elapsed() < Duration::from_secs(1), "the poll waited before refusing");
+    assert_eq!(stub.count(), 0, "a refused call still sent a request");
+}
+
 async fn call(client: &Client, operation: &str, args: &OauthArgs) -> Result<(), OauthError> {
     let oauth = client.oauth();
     let client_id = args.client_id.as_deref().unwrap_or(CLIENT_ID);

@@ -18,6 +18,13 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_BASE_DELAY: Duration = Duration::from_millis(250);
+/// The longest `Retry-After` waited out as given, 2^31 - 1 ms. One past it reads
+/// like a header that will not parse, a throttle all the same, so the call waits
+/// its own backoff instead: a `Retry-After` of 2147484 held a call for 24.8 days,
+/// and 9223372036854775807 or a year-9999 date for good, from the API and object
+/// storage alike (2.2.1, measured 2026-09-26), with tokio clamping rather than
+/// refusing the sleep.
+const MAX_RETRY_AFTER: Duration = Duration::from_millis(2_147_483_647);
 
 /// A client for the InternetData API.
 ///
@@ -78,6 +85,23 @@ impl Client {
 
     pub(crate) fn timeout(&self) -> Duration {
         self.0.timeout
+    }
+
+    /// One call's timeout: its own, else the client's. Zero is refused here,
+    /// before any request, since no attempt can meet it: accepted, it failed
+    /// every OAuth call as a network error, retried after ~750 ms of backoff
+    /// where the call retries, and the poll only after its first wait (2.2.1,
+    /// measured 2026-09-26). `build` refuses the client's own zero.
+    /// `Duration::MAX` needs no refusal, since tokio clamps a deadline past its
+    /// reach rather than failing.
+    pub(crate) fn call_timeout(&self, per_call: Option<Duration>) -> Result<Duration, Error> {
+        match per_call {
+            Some(timeout) if timeout.is_zero() => {
+                Err(Error::Config("timeout must be positive".to_owned()))
+            }
+            Some(timeout) => Ok(timeout),
+            None => Ok(self.0.timeout),
+        }
     }
 }
 
@@ -194,8 +218,9 @@ impl ClientBuilder {
 }
 
 /// Backs off exponentially, except that a server-supplied `Retry-After` wins
-/// over the schedule. A 429 WITHOUT that header is a spent allowance rather than
-/// a throttle and is not retried at all, which [`Error::retryable`] decides.
+/// over the schedule, up to [`MAX_RETRY_AFTER`]. A 429 WITHOUT that header is a
+/// spent allowance rather than a throttle and is not retried at all, which
+/// [`Error::retryable`] decides.
 pub(crate) async fn with_retry<T, E, F, Fut>(retries: u32, mut attempt: F) -> Result<T, E>
 where
     E: Retry,
@@ -209,8 +234,9 @@ where
             Ok(value) => return Ok(value),
             Err(err) if remaining == 0 || !err.retryable() => return Err(err),
             Err(err) => {
-                tokio::time::sleep(err.retry_after().unwrap_or(delay)).await;
-                delay *= 2;
+                let wait = err.retry_after().filter(|wait| *wait <= MAX_RETRY_AFTER);
+                tokio::time::sleep(wait.unwrap_or(delay)).await;
+                delay = delay.saturating_mul(2);
                 remaining -= 1;
             }
         }

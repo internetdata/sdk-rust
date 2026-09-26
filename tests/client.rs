@@ -256,6 +256,53 @@ async fn a_rate_limit_is_retried_after_the_server_supplied_wait() {
     assert!(start.elapsed() >= Duration::from_secs(1), "waited {:?}", start.elapsed());
 }
 
+/// Past 2^31 - 1 ms a `Retry-After` is waited out on the client's own backoff,
+/// still a throttle: 2147484 held a call for 24.8 days, and 9223372036854775807
+/// or a year-9999 date for good (2.2.1). Object storage's is bounded the same
+/// way, in download.rs.
+#[tokio::test]
+async fn a_retry_after_past_its_bound_waits_the_backoff() {
+    for value in ["2147484", "9223372036854775807", "Fri, 31 Dec 9999 23:59:59 GMT"] {
+        let stub = Stub::start([]).await;
+        stub.sequence(
+            LIST,
+            [
+                Route::json(429, r#"{"rc":"RATE_LIMITED"}"#).header("Retry-After", value),
+                Route::ok(r#"{"databases":[]}"#),
+            ],
+        );
+        let client = stub.client().build().expect("build");
+
+        let listed = tokio::time::timeout(Duration::from_secs(5), client.database().list())
+            .await
+            .unwrap_or_else(|_| panic!("Retry-After {value} held the call"));
+
+        listed.unwrap_or_else(|e| panic!("Retry-After {value}: {e}"));
+        assert_eq!(stub.count(), 2, "Retry-After {value}");
+    }
+
+    // One below the bound is still the server's to set.
+    let stub = Stub::start([]).await;
+    stub.sequence(
+        LIST,
+        [Route::json(429, r#"{"rc":"RATE_LIMITED"}"#).header("Retry-After", "2147483")],
+    );
+    let client = stub.client().build().expect("build");
+    let held = tokio::time::timeout(Duration::from_secs(2), client.database().list()).await;
+    assert!(held.is_err(), "Retry-After 2147483 was not waited out");
+
+    // One past u64 never parses, so its 429 stays a spent quota.
+    let stub = Stub::start([(
+        LIST.to_owned(),
+        Route::json(429, r#"{"rc":"RATE_LIMITED"}"#).header("Retry-After", "18446744073709551616"),
+    )])
+    .await;
+    let client = stub.client().build().expect("build");
+    let err = client.database().list().await.expect_err("a spent quota");
+    assert_eq!(err.kind(), ErrorKind::QuotaExceeded, "{err}");
+    assert_eq!(stub.count(), 1);
+}
+
 #[tokio::test]
 async fn a_server_fault_is_retried_up_to_the_configured_budget() {
     let stub = Stub::start([(LIST.to_owned(), Route::json(503, r#"{"rc":"UNAVAILABLE"}"#))]).await;
@@ -322,16 +369,33 @@ fn the_builder_rejects_an_unusable_base_url() {
 /// proxies answer with a redirect and others with a 404.
 #[tokio::test]
 async fn a_trailing_slash_on_the_base_url_is_not_doubled() {
-    let stub = Stub::start([(LIST.to_owned(), Route::ok(r#"{"databases":[]}"#))]).await;
-    let client = Client::builder()
-        .base_url(format!("{}/", stub.base_url))
-        .api_key(KEY)
-        .build()
-        .expect("build");
+    const METADATA_PATH: &str = "/.well-known/oauth-authorization-server";
+    for slashes in 1..=3 {
+        let stub = Stub::start([
+            (LIST.to_owned(), Route::ok(r#"{"databases":[]}"#)),
+            (
+                METADATA_PATH.to_owned(),
+                Route::ok(
+                    r#"{"issuer":"https://api.example.test",
+                    "authorization_endpoint":"https://api.example.test/oauth/authorize",
+                    "token_endpoint":"https://api.example.test/oauth/token"}"#,
+                ),
+            ),
+            (DOWNLOAD.to_owned(), Route::json(302, "").header("Location", "https://s3.test/x")),
+        ])
+        .await;
+        let client = Client::builder()
+            .base_url(format!("{}{}", stub.base_url, "/".repeat(slashes)))
+            .api_key(KEY)
+            .build()
+            .expect("build");
 
-    client.database().list().await.expect("list");
+        client.database().list().await.expect("list");
+        client.oauth().metadata().await.expect("metadata");
+        client.database().download_url("x_v1", DatabaseFormat::Csvgz).await.expect("link");
 
-    assert_eq!(stub.calls(), vec![LIST]);
+        assert_eq!(stub.calls(), vec![LIST, METADATA_PATH, DOWNLOAD], "{slashes} slash(es)");
+    }
 }
 
 /// Far below the client's 30 second read timeout, so the only bound that can

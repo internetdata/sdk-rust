@@ -91,3 +91,32 @@ impl PollClock for FakeClock {
         }
     }
 }
+
+/// `interval += 5` past the top of an `i64` panicked in a debug build and wrapped
+/// to a negative, zero-second interval in release, so a server's `slow_down` near
+/// that value would have polled without pause. It saturates, and the sleep after
+/// it ends at the deadline.
+#[tokio::test]
+async fn a_slow_down_at_the_top_of_the_interval_saturates() {
+    let stub = Stub::start([]).await;
+    stub.sequence("/oauth/token", [support::Route::json(400, r#"{"error":"slow_down"}"#)]);
+    let client = stub.anonymous().build().expect("build");
+    let device: DeviceAuthorization = serde_json::from_value(serde_json::json!({
+        "device_code": "mo_dc_x", "user_code": "BCDF-GHJK",
+        "verification_uri": "https://app.example.test/device",
+        "expires_in": i64::MAX, "interval": i64::MAX - 2,
+    }))
+    .expect("device");
+    let clock = FakeClock::default();
+
+    let err = client
+        .oauth()
+        .poll("internetdata-cli", &device, OauthOptions::new(), &clock)
+        .await
+        .expect_err("expired");
+
+    assert!(matches!(err, crate::OauthError::ExpiredToken(ref e) if e.status.is_none()), "{err:?}");
+    assert_eq!(stub.count(), 1);
+    let waits: Vec<u64> = clock.waits().iter().map(Duration::as_secs).collect();
+    assert_eq!(waits, [i64::MAX as u64 - 2, 2]);
+}
