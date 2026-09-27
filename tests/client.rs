@@ -118,7 +118,7 @@ async fn the_download_history_decodes_a_refusal_as_well_as_a_success() {
     let stub = Stub::start([(
         DOWNLOADS.to_owned(),
         Route::ok(
-            r#"{"downloads":[{"dataset_id":"bogon_ip_v1","format":"csvgz","outcome":"ok","bytes":760,"http_status":302,"apikey_id":"ak_1","client_ip":"203.0.113.7","user_agent":"curl/8","created":"2026-09-04T10:00:00.000Z"},{"dataset_id":"vpn_ip_v1","format":"mmdb","outcome":"denied","bytes":null,"http_status":403,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"2026-09-04T09:00:00.000Z"}]}"#,
+            r#"{"downloads":[{"dataset_id":"bogon_ip_v1","format":"csvgz","outcome":"ok","sample":false,"bytes":760,"http_status":302,"apikey_id":"ak_1","client_ip":"203.0.113.7","user_agent":"curl/8","created":"2026-09-04T10:00:00.000Z"},{"dataset_id":"vpn_ip_v1","format":"mmdb","outcome":"denied","sample":true,"bytes":null,"http_status":403,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"2026-09-04T09:00:00.000Z"}]}"#,
         ),
     )])
     .await;
@@ -132,6 +132,7 @@ async fn the_download_history_decodes_a_refusal_as_well_as_a_success() {
     assert_eq!(attempts[1].outcome, Outcome::Denied);
     assert_eq!(attempts[1].bytes, None, "a refusal moved no bytes and says so with null");
     assert_eq!(attempts[1].apikey_id, None);
+    assert_eq!([attempts[0].sample, attempts[1].sample], [false, true]);
     let target = stub.target(DOWNLOADS).expect("the downloads endpoint was never asked");
     assert!(target.contains("limit=2"), "{target}");
 }
