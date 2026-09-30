@@ -16,9 +16,13 @@ exclude = ["/spec", "/scripts", "/.github", "/integration"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+# The PKCE verifier's 32 bytes, from the system's secure random source.
+getrandom = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The PKCE challenge, SHA-256 over the verifier.
+sha2 = { version = "0.11", default-features = false }
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "time"] }
 

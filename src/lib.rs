@@ -7,8 +7,8 @@
 //! answered `401` - the key is nevertheless OPTIONAL, and a client built without
 //! one sends no `Authorization` header at all. There is no per-address lookup
 //! here: the database catalog and the files behind it are reached through
-//! [`Client::database`], and the OAuth device-flow sign-in through
-//! [`Client::oauth`].
+//! [`Client::database`], and the OAuth sign-in, by device flow or by
+//! authorization code, through [`Client::oauth`].
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), internetdata::Error> {
@@ -56,8 +56,8 @@ pub use client::{Client, ClientBuilder, DEFAULT_BASE_URL};
 pub use database::DatabaseApi;
 pub use error::{Error, ErrorKind};
 pub use oauth::{
-    DeviceAuthorization, DeviceAuthorizationOptions, OauthApi, OauthError, OauthErrorResponse,
-    OauthMetadata, OauthOptions, TokenResponse,
+    AuthorizationUrlOptions, DeviceAuthorization, DeviceAuthorizationOptions, OauthApi, OauthError,
+    OauthErrorResponse, OauthMetadata, OauthOptions, Pkce, TokenResponse,
 };
 
 use generated::models;
