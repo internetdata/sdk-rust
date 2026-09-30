@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.4.0 - 2026-09-30
+
+### Features
+
+- Add the authorization code sign-in, with PKCE ([`fdf97d6`](https://github.com/internetdata/sdk-rust/commit/fdf97d66844827b33775c4cc5fd489bb652208a2))
+
 ## 2.3.0 - 2026-09-27
 
 ### Features
