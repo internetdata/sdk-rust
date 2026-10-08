@@ -354,6 +354,35 @@ async fn a_retry_after_past_its_bound_waits_the_backoff() {
     assert_eq!(stub.count(), 1);
 }
 
+/// An HTTP date comes in three forms, and RFC 9110 has a recipient read all
+/// three: RFC 850's and asctime's were read as no date at all, so a throttle
+/// dated in either was a spent quota (2.4.2, measured 2026-10-08). What only a
+/// general date parser would read stays a spent quota.
+#[tokio::test]
+async fn a_retry_after_is_seconds_or_an_http_date_and_nothing_else() {
+    let throttled =
+        |value: &str| Route::json(429, r#"{"rc":"RATE_LIMITED"}"#).header("Retry-After", value);
+    // Past dates, so each wait is zero.
+    for value in [
+        "Sun, 06 Nov 1994 08:49:37 GMT",
+        "Sunday, 06-Nov-94 08:49:37 GMT",
+        "Sun Nov  6 08:49:37 1994",
+    ] {
+        let stub = Stub::start([(LIST.to_owned(), throttled(value))]).await;
+        let client = stub.client().retries(1).build().expect("build");
+        let err = client.database().list().await.expect_err("still throttled");
+        assert_eq!(err.kind(), ErrorKind::RateLimited, "{value}: {err}");
+        assert_eq!(stub.count(), 2, "{value}");
+    }
+    for value in ["-1", "x", "tomorrow", "+1 day", "1e400"] {
+        let stub = Stub::start([(LIST.to_owned(), throttled(value))]).await;
+        let client = stub.client().retries(1).build().expect("build");
+        let err = client.database().list().await.expect_err("a spent quota");
+        assert_eq!(err.kind(), ErrorKind::QuotaExceeded, "{value}: {err}");
+        assert_eq!(stub.count(), 1, "{value}");
+    }
+}
+
 #[tokio::test]
 async fn a_server_fault_is_retried_up_to_the_configured_budget() {
     let stub = Stub::start([(LIST.to_owned(), Route::json(503, r#"{"rc":"UNAVAILABLE"}"#))]).await;

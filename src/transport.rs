@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use chrono::TimeZone;
 use reqwest::header::{AUTHORIZATION, HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
 
@@ -213,7 +214,46 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     if let Ok(seconds) = value.parse::<u64>() {
         return Some(Duration::from_secs(seconds));
     }
-    let when = chrono::DateTime::parse_from_rfc2822(&value).ok()?;
-    let wait = when.timestamp() - chrono::Utc::now().timestamp();
+    let wait = http_date(&value)? - chrono::Utc::now().timestamp();
     Some(Duration::from_secs(wait.max(0) as u64))
+}
+
+/// An HTTP date as a Unix timestamp, in any of the three forms RFC 9110 says a
+/// recipient must read. The RFC 2822 parser takes the IMF-fixdate a server
+/// sends, and not the obsolete RFC 850 and asctime forms, so a 429 dated in
+/// either was a spent quota rather than a throttle (2.4.2, measured
+/// 2026-10-08). Both are GMT, the only zone either may carry.
+fn http_date(value: &str) -> Option<i64> {
+    if let Ok(when) = chrono::DateTime::parse_from_rfc2822(value) {
+        return Some(when.timestamp());
+    }
+    ["%A, %d-%b-%y %H:%M:%S GMT", "%a %b %e %H:%M:%S %Y"]
+        .into_iter()
+        .find_map(|format| chrono::NaiveDateTime::parse_from_str(value, format).ok())
+        .map(|when| chrono::Utc.from_utc_datetime(&when).timestamp())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::http_date;
+
+    /// RFC 9110's own example, in each of its three forms.
+    #[test]
+    fn an_http_date_is_read_in_all_three_forms() {
+        for value in [
+            "Sun, 06 Nov 1994 08:49:37 GMT",
+            "Sunday, 06-Nov-94 08:49:37 GMT",
+            "Sun Nov  6 08:49:37 1994",
+        ] {
+            assert_eq!(http_date(value), Some(784_111_777), "{value}");
+        }
+    }
+
+    /// What a general date parser would read, and an HTTP date must not.
+    #[test]
+    fn nothing_else_is_an_http_date() {
+        for value in ["-1", "x", "tomorrow", "noon", "+1 day", "1e400", "soon", "1994-11-06"] {
+            assert_eq!(http_date(value), None, "{value}");
+        }
+    }
 }
