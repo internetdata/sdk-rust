@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.4.3 - 2026-10-08
+
+### Fixes
+
+- Retry an unreadable download link answer, as a server_error ([`3cdaded`](https://github.com/internetdata/sdk-rust/commit/3cdaded39b01597c618c8f489aeb52df964bcca1))
+- Read a Retry-After dated in RFC 850 or asctime form ([`cb76bc6`](https://github.com/internetdata/sdk-rust/commit/cb76bc6811a02c357fc526d4e605f4e724dbfc8c))
+
 ## 2.4.2 - 2026-10-04
 
 ### Fixes
