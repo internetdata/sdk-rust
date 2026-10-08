@@ -209,6 +209,56 @@ async fn a_redirect_following_http_client_is_refused_not_obeyed() {
     assert!(err.message().contains("redirect::Policy::none"), "{}", err.message());
 }
 
+/// A 2xx a call cannot read is no answer: the server_error an outage is,
+/// carrying the status, and retried like one. download_url read every 2xx as a
+/// redirect a caller's client had followed, a bad_request sent once (2.4.2,
+/// measured 2026-10-08), so its answer is in the table too.
+#[tokio::test]
+async fn an_answer_a_call_cannot_read_is_a_retried_server_error() {
+    const BODIES: [(&str, &str); 9] = [
+        ("an HTML page", "<html>gateway</html>"),
+        ("a cut-off body", r#"{"databases":["#),
+        ("an empty body", ""),
+        ("an array", "[]"),
+        ("a string", r#""x""#),
+        ("null", "null"),
+        ("an empty object", "{}"),
+        (
+            "members of the wrong type",
+            r#"{"databases":{},"checksums":[],"downloads":"x","id":"x"}"#,
+        ),
+        (
+            "entries without their members",
+            r#"{"databases":[{}],"checksums":{},"downloads":[{}],"id":"x","format":"csvgz"}"#,
+        ),
+    ];
+    // Each case waits out two backoffs, so they run side by side.
+    let mut cases = tokio::task::JoinSet::new();
+    for path in [LIST, METADATA, CHECKSUM, DOWNLOADS, DOWNLOAD] {
+        for (name, body) in BODIES {
+            cases.spawn(async move {
+                let stub = Stub::start([(path.to_owned(), Route::ok(body))]).await;
+                let client = stub.client().retries(2).build().expect("build");
+                let db = client.database();
+                let outcome = match path {
+                    LIST => db.list().await.map(drop),
+                    METADATA => db.metadata("bogon_ip_v1").await.map(drop),
+                    CHECKSUM => db.checksums("bogon_ip_v1", DatabaseFormat::Csvgz).await.map(drop),
+                    DOWNLOADS => db.downloads(None).await.map(drop),
+                    _ => db.download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await.map(drop),
+                };
+                let Err(err) = outcome else { panic!("{path}, {name}: returned an answer") };
+                assert_eq!(err.kind(), ErrorKind::ServerError, "{path}, {name}: {err}");
+                assert_eq!(err.status(), Some(200), "{path}, {name}: the status");
+                assert_eq!(stub.count(), 3, "{path}, {name}: retried like an outage");
+            });
+        }
+    }
+    while let Some(case) = cases.join_next().await {
+        case.expect("case");
+    }
+}
+
 /// A 404 from a misspelled database id is a CLIENT error. Letting it fall
 /// through to the retryable `server_error` default is the mistake three of the
 /// four VPNDetection SDKs shipped with.
