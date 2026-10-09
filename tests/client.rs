@@ -23,7 +23,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     let stub = Stub::start([(
         LIST.to_owned(),
         Route::ok(
-            r#"{"databases":[{"base":"bogon_ip","name":"Bogon IP","summary":"unroutable ranges","standing":"licensed","license_type":"standard","starts":"2026-01-01T00:00:00.000Z","expires":null,"renews_at":null,"notice_due_at":null,"versions":[{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":["csvgz","mmdb"]}]}]}"#,
+            r#"{"databases":[{"base":"bogon_ip","name":"Bogon IP","summary":"unroutable ranges","standing":"licensed","open":false,"license_type":"standard","starts":"2026-01-01T00:00:00.000Z","expires":null,"renews_at":null,"notice_due_at":null,"versions":[{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":["csvgz","mmdb"]}]},{"base":"asn","name":"ASN","summary":"every ASN","standing":"unlicensed","open":true,"license_type":null,"starts":null,"expires":null,"renews_at":null,"notice_due_at":null,"versions":[{"id":"asn_v1","version":1,"summary":"v1","formats":["csvgz"]}]}]}"#,
         ),
     )])
     .await;
@@ -31,10 +31,15 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
 
     let databases = client.database().list().await.expect("list");
 
-    assert_eq!(databases.len(), 1);
+    assert_eq!(databases.len(), 2);
     let family = &databases[0];
     assert_eq!(family.base, "bogon_ip");
     assert_eq!(family.standing, Standing::Licensed);
+    assert_eq!(
+        [(databases[0].open, databases[0].standing), (databases[1].open, databases[1].standing)],
+        [(false, Standing::Licensed), (true, Standing::Unlicensed)],
+        "an Open family downloads whatever its standing, which stays as served"
+    );
     assert!(family.expires.is_none(), "a license with no end date reads as None");
     assert!(family.starts.is_some(), "starts is present and non-null here");
     let version = &family.versions[0];
@@ -118,7 +123,7 @@ async fn the_download_history_decodes_a_refusal_as_well_as_a_success() {
     let stub = Stub::start([(
         DOWNLOADS.to_owned(),
         Route::ok(
-            r#"{"downloads":[{"dataset_id":"bogon_ip_v1","format":"csvgz","outcome":"ok","sample":false,"bytes":760,"http_status":302,"apikey_id":"ak_1","client_ip":"203.0.113.7","user_agent":"curl/8","created":"2026-09-04T10:00:00.000Z"},{"dataset_id":"vpn_ip_v1","format":"mmdb","outcome":"denied","sample":true,"bytes":null,"http_status":403,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"2026-09-04T09:00:00.000Z"}]}"#,
+            r#"{"downloads":[{"dataset_id":"bogon_ip_v1","format":"csvgz","outcome":"ok","sample":false,"open":true,"bytes":760,"http_status":302,"apikey_id":"ak_1","client_ip":"203.0.113.7","user_agent":"curl/8","created":"2026-09-04T10:00:00.000Z"},{"dataset_id":"vpn_ip_v1","format":"mmdb","outcome":"denied","sample":true,"open":false,"bytes":null,"http_status":403,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"2026-09-04T09:00:00.000Z"}]}"#,
         ),
     )])
     .await;
@@ -133,6 +138,7 @@ async fn the_download_history_decodes_a_refusal_as_well_as_a_success() {
     assert_eq!(attempts[1].bytes, None, "a refusal moved no bytes and says so with null");
     assert_eq!(attempts[1].apikey_id, None);
     assert_eq!([attempts[0].sample, attempts[1].sample], [false, true]);
+    assert_eq!([attempts[0].open, attempts[1].open], [true, false]);
     let target = stub.target(DOWNLOADS).expect("the downloads endpoint was never asked");
     assert!(target.contains("limit=2"), "{target}");
 }

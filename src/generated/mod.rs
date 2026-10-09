@@ -14,7 +14,8 @@
 // Only the v2 database's models are generated; scripts/generate.sh selects them
 // by name, and says why v1, IAM and OAuth are left out.
 //
-// Generated code is held to the generator's standards, not ours.
-#![allow(clippy::all, dead_code, unused_imports)]
+// Generated code is held to the generator's standards, not ours, and its doc
+// comments carry the spec's descriptions as written, bare URLs included.
+#![allow(clippy::all, dead_code, unused_imports, rustdoc::bare_urls)]
 
 pub mod models;

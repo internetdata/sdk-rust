@@ -199,6 +199,7 @@ fn listing(bases: &[&str]) -> String {
                 "name": base,
                 "summary": "one line",
                 "standing": "licensed",
+                "open": false,
                 "license_type": "standard",
                 "starts": "2026-01-01T00:00:00.000Z",
                 "expires": null, "renews_at": null, "notice_due_at": null,
