@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.5.0 - 2026-10-09
+
+### Features
+
+- Re-pin the spec to 2026.10.08, adding the Open databases' open flag ([`df0df9f`](https://github.com/internetdata/sdk-rust/commit/df0df9f059d2b78fd102c52eb3f97b9e43b0732a))
+
 ## 2.4.3 - 2026-10-08
 
 ### Fixes
