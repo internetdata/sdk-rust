@@ -363,7 +363,8 @@ async fn a_retry_after_past_its_bound_waits_the_backoff() {
 /// An HTTP date comes in three forms, and RFC 9110 has a recipient read all
 /// three: RFC 850's and asctime's were read as no date at all, so a throttle
 /// dated in either was a spent quota (2.4.2, measured 2026-10-08). What only a
-/// general date parser would read stays a spent quota.
+/// general date parser would read stays a spent quota, and so does a signed
+/// count: `+1` waited a second (2.5.0, measured 2026-10-09).
 #[tokio::test]
 async fn a_retry_after_is_seconds_or_an_http_date_and_nothing_else() {
     let throttled =
@@ -380,7 +381,7 @@ async fn a_retry_after_is_seconds_or_an_http_date_and_nothing_else() {
         assert_eq!(err.kind(), ErrorKind::RateLimited, "{value}: {err}");
         assert_eq!(stub.count(), 2, "{value}");
     }
-    for value in ["-1", "x", "tomorrow", "+1 day", "1e400"] {
+    for value in ["+1", "-1", "x", "tomorrow", "+1 day", "1e400", "0x10", "1_0", "1e3", "1.5"] {
         let stub = Stub::start([(LIST.to_owned(), throttled(value))]).await;
         let client = stub.client().retries(1).build().expect("build");
         let err = client.database().list().await.expect_err("a spent quota");

@@ -211,8 +211,10 @@ impl Answer {
 /// parse reads as absent rather than as zero.
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim().to_owned();
-    if let Ok(seconds) = value.parse::<u64>() {
-        return Some(Duration::from_secs(seconds));
+    // Digits alone, as RFC 9110's delay-seconds is: `u64`'s parser also takes a
+    // leading `+`, so `+1` waited a second (2.5.0, measured 2026-10-09).
+    if value.bytes().all(|b| b.is_ascii_digit()) {
+        return value.parse::<u64>().ok().map(Duration::from_secs);
     }
     let wait = http_date(&value)? - chrono::Utc::now().timestamp();
     Some(Duration::from_secs(wait.max(0) as u64))
