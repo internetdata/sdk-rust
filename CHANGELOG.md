@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.5.1 - 2026-10-10
+
+### Fixes
+
+- Re-pin the spec to 2026.10.09: rotating a key needs apikeys.reveal ([`5462c29`](https://github.com/internetdata/sdk-rust/commit/5462c29e908933ca3066d37dcce96b5dc757a407))
+- Read a signed Retry-After as no delay, as RFC 9110 has it ([`41b5a44`](https://github.com/internetdata/sdk-rust/commit/41b5a44b9dac3a8943d704f420d501e4482d3bbf))
+
 ## 2.5.0 - 2026-10-09
 
 ### Features
