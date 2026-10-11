@@ -418,6 +418,40 @@ async fn the_key_travels_as_a_bearer_token_and_not_in_the_query_string() {
     assert!(!target.contains(KEY), "the key reached the query string: {target}");
 }
 
+/// A key of blanks sent `Bearer` and the blank, which reads as a wrong key rather
+/// than none; the blanks around a key, a file's newline among them, are no part
+/// of it.
+#[tokio::test]
+async fn a_key_is_trimmed_and_a_blank_one_is_no_key() {
+    let stub = Stub::start([(LIST.to_owned(), Route::ok(r#"{"databases":[]}"#))]).await;
+
+    for key in ["   ", "\t", " \r\n "] {
+        let client = stub.anonymous().api_key(key).build().expect("build");
+        client.database().list().await.expect("list");
+    }
+    let client = stub.anonymous().api_key(format!(" {KEY}\r\n")).build().expect("build");
+    client.database().list().await.expect("list");
+
+    let calls = stub.requests();
+    assert_eq!(calls.len(), 4);
+    for call in &calls[..3] {
+        assert_eq!(call.header("authorization"), None);
+    }
+    assert_eq!(calls[3].header("authorization"), Some(format!("Bearer {KEY}").as_str()));
+}
+
+/// reqwest failed every call with such a key as a retried `network` error with
+/// nothing sent, and a tab went out on the wire.
+#[test]
+fn a_key_holding_a_control_character_is_refused_at_build() {
+    for key in ["sk\u{1}test", "sk-test\u{7f}", "sk\ttest", "sk-test\r\nX-Injected: 1"] {
+        let err = internetdata::Client::builder().api_key(key).build().expect_err(key);
+        assert_eq!(err.kind(), ErrorKind::BadRequest, "{key:?}");
+        assert!(err.to_string().contains("control character"), "{err}");
+        assert!(!err.to_string().contains("sk"), "the key reached the message: {err}");
+    }
+}
+
 /// Today every endpoint is licensed, so a keyless client only ever gets a 401.
 /// It still has to BUILD and to send no credential at all, because a database
 /// offered without a license would need exactly this client. The empty arm is

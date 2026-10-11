@@ -127,9 +127,12 @@ impl ClientBuilder {
     /// `db.download` scope; keys are default-deny, so an existing key does not
     /// gain database access until that scope is added to it.
     ///
-    /// Optional. Leave it unset, or pass an empty string, and no `Authorization`
-    /// header is sent - which is what an unset `${{ secrets.X }}` interpolates
-    /// to, and a better answer than `Bearer ` with nothing behind it.
+    /// Optional. Leave it unset, or pass an empty or blank string, and no
+    /// `Authorization` header is sent - which is what an unset `${{ secrets.X }}`
+    /// interpolates to, and a better answer than `Bearer ` with nothing behind
+    /// it. Whitespace around a key, such as the newline a key read from a file
+    /// ends in, is not part of it; a key still holding a control character is
+    /// refused by [`ClientBuilder::build`].
     pub fn api_key(mut self, key: impl Into<String>) -> Self {
         self.api_key = Some(key.into());
         self
@@ -192,6 +195,14 @@ impl ClientBuilder {
             return Err(Error::Config(format!("base url {base_url:?} needs a scheme and a host")));
         }
 
+        let api_key = self.api_key.map(|key| key.trim().to_owned()).filter(|key| !key.is_empty());
+        // Refused here rather than at the first request, where reqwest failed
+        // every call as a retried network error with nothing sent. The message
+        // names the key's fault and never the key.
+        if api_key.as_deref().is_some_and(|key| key.chars().any(char::is_control)) {
+            return Err(Error::Config("the API key holds a control character".to_owned()));
+        }
+
         let http = match self.http_client {
             Some(client) => client,
             None => reqwest::Client::builder()
@@ -206,12 +217,7 @@ impl ClientBuilder {
         };
 
         Ok(Client(Arc::new(Inner {
-            transport: Transport::new(
-                http,
-                base_url.trim_end_matches('/').to_owned(),
-                // Empty counts as absent, in one place rather than per setter.
-                self.api_key.filter(|key| !key.is_empty()),
-            ),
+            transport: Transport::new(http, base_url.trim_end_matches('/').to_owned(), api_key),
             retries: self.retries.unwrap_or(DEFAULT_RETRIES),
             timeout,
         })))
