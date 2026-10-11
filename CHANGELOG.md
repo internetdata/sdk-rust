@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.5.2 - 2026-10-11
+
+### Fixes
+
+- Read an HTTP date only in RFC 9110's three forms, in GMT ([`60178fa`](https://github.com/internetdata/sdk-rust/commit/60178fa9df67aa562fe499cba431591411c79148))
+- Trim the API key, and refuse one holding a control character at build ([`1c3de78`](https://github.com/internetdata/sdk-rust/commit/1c3de78969b3556e3b6ebf1930cdba65b4c1f23b))
+
 ## 2.5.1 - 2026-10-10
 
 ### Fixes
