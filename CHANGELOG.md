@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.5.3 - 2026-10-13
+
+### Fixes
+
+- Re-pin the spec to 2026.10.13: Open databases come with a license ([`6c96f3c`](https://github.com/internetdata/sdk-rust/commit/6c96f3ca7cff6ad934b32b79437896738e7c49f6))
+
 ## 2.5.2 - 2026-10-11
 
 ### Fixes
