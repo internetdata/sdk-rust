@@ -38,7 +38,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     assert_eq!(
         [(databases[0].open, databases[0].standing), (databases[1].open, databases[1].standing)],
         [(false, Standing::Licensed), (true, Standing::Unlicensed)],
-        "an Open family downloads whatever its standing, which stays as served"
+        "an Open family's standing stays as served, never derived from open"
     );
     assert!(family.expires.is_none(), "a license with no end date reads as None");
     assert!(family.starts.is_some(), "starts is present and non-null here");
