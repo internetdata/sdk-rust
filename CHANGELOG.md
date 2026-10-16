@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.5.4 - 2026-10-16
+
+### Fixes
+
+- Re-pin the spec to 2026.10.15: three descriptions in US spelling ([`de7add2`](https://github.com/internetdata/sdk-rust/commit/de7add212145ff64f40d52762518955a5c89e969))
+
 ## 2.5.3 - 2026-10-13
 
 ### Fixes
