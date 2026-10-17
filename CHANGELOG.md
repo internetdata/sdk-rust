@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.6.0 - 2026-10-17
+
+### Features
+
+- Re-pin the spec to 2026.10.16: dynamic client registration ([`694d2fc`](https://github.com/internetdata/sdk-rust/commit/694d2fc9e2dfe3115c9da756a4307b64f76107eb))
+
 ## 2.5.4 - 2026-10-16
 
 ### Fixes
