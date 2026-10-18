@@ -124,7 +124,6 @@ async fn register_snippet() -> Result<(), Box<dyn std::error::Error>> {
     let opts = RegisterOptions::new().client_name("Your App");
     let registration =
         client.oauth().register_with(&["http://127.0.0.1:8765/callback"], opts).await?;
-    // registration.client_id is the client ID for authorization_url and exchange_authorization_code.
     Ok(())
 }
 
