@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.0 - 2026-10-18
+
+### Features
+
+- Add oauth().register, for RFC 7591 dynamic client registration ([`7455928`](https://github.com/internetdata/sdk-rust/commit/7455928c1809ab93330005f537b386f5aa64882c))
+
 ## 2.6.1 - 2026-10-18
 
 ### Fixes
