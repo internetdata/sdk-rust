@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.1 - 2026-10-18
+
+### Fixes
+
+- Re-pin the spec to 2026.10.18: client_id_issued_at is int64 ([`031239e`](https://github.com/internetdata/sdk-rust/commit/031239eb8cd6a8af5e0af33ee60795e5690af838))
+
 ## 2.7.0 - 2026-10-18
 
 ### Features
