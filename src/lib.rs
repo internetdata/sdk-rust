@@ -56,8 +56,9 @@ pub use client::{Client, ClientBuilder, DEFAULT_BASE_URL};
 pub use database::DatabaseApi;
 pub use error::{Error, ErrorKind};
 pub use oauth::{
-    AuthorizationUrlOptions, DeviceAuthorization, DeviceAuthorizationOptions, OauthApi, OauthError,
-    OauthErrorResponse, OauthMetadata, OauthOptions, Pkce, TokenResponse,
+    AuthorizationUrlOptions, ClientRegistration, DeviceAuthorization, DeviceAuthorizationOptions,
+    OauthApi, OauthError, OauthErrorResponse, OauthMetadata, OauthOptions, Pkce, RegisterOptions,
+    TokenResponse,
 };
 
 use generated::models;
