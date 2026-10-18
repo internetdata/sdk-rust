@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.6.1 - 2026-10-18
+
+### Fixes
+
+- Resolve beside reqwest 0.13.2 and newer ([`b702db5`](https://github.com/internetdata/sdk-rust/commit/b702db515c7abfd7c66ce1aebb02b69e68365faf))
+
 ## 2.6.0 - 2026-10-17
 
 ### Features
