@@ -20,7 +20,7 @@ pub struct DatabaseMetadata {
     #[serde(rename = "update_freq", skip_serializing_if = "Option::is_none")]
     pub update_freq: Option<String>,
     /// ISO-8601 date (YYYY-MM-DD) the published build was generated on.
-    #[serde(rename = "updated")]
+    #[serde(rename = "updated", deserialize_with = "crate::dates::date")]
     pub updated: chrono::NaiveDate,
     /// Row count in the current build.
     #[serde(rename = "entries")]

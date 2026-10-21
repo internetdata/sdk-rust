@@ -265,6 +265,79 @@ async fn an_answer_a_call_cannot_read_is_a_retried_server_error() {
     }
 }
 
+/// A date member is read only in the form its `format` names, on a day and at
+/// a time that exist. chrono's own reader took `2026-10-5`, ` 2026-10-20`,
+/// `+0500`, a space for the `T` and a leap second as some date through 2.7.2.
+#[tokio::test]
+async fn a_date_in_any_other_form_is_a_retried_server_error() {
+    const DATE_TIMES: [&str; 12] = [
+        "x",
+        "tomorrow",
+        "2026-02-30T00:00:00Z",
+        "2026-10-20T24:00:00Z",
+        "2026-10-20T10:00:00",
+        "2026-10-20",
+        "2026-10-20 10:00:00Z",
+        "2026-10-20t10:00:00z",
+        "2026-10-20T10:00:00+0500",
+        "2026-10-20T23:59:60Z",
+        " 2026-10-20T10:00:00Z",
+        "+002026-10-20T10:00:00Z",
+    ];
+    const DATES: [&str; 8] = [
+        "x",
+        "2026-02-30",
+        "2026-10-5",
+        "2026-1-05",
+        " 2026-10-20",
+        "+2026-10-20",
+        "-0001-10-20",
+        "2026-10-20T00:00:00Z",
+    ];
+    let family = |starts: &str| {
+        format!(
+            r#"{{"databases":[{{"base":"asn","name":"ASN","summary":"s","standing":"licensed","open":false,"license_type":"standard","starts":"{starts}","expires":null,"renews_at":null,"notice_due_at":null,"versions":[]}}]}}"#
+        )
+    };
+    let attempt = |created: &str| {
+        format!(
+            r#"{{"downloads":[{{"dataset_id":"asn_v1","format":"csvgz","outcome":"ok","sample":false,"open":true,"bytes":1,"http_status":302,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"{created}"}}]}}"#
+        )
+    };
+    let metadata = |updated: &str| {
+        format!(
+            r#"{{"id":"asn_v1","updated":"{updated}","entries":1,"schema":{{}},"size":{{"csvgz":1}}}}"#
+        )
+    };
+    let mut cases = Vec::new();
+    for value in DATE_TIMES {
+        cases.push((LIST, value, family(value)));
+        cases.push((DOWNLOADS, value, attempt(value)));
+    }
+    cases.extend(DATES.map(|value| (METADATA, value, metadata(value))));
+    // Each case waits out two backoffs, so they run side by side.
+    let mut checks = tokio::task::JoinSet::new();
+    for (path, value, body) in cases {
+        checks.spawn(async move {
+            let stub = Stub::start([(path.to_owned(), Route::ok(body))]).await;
+            let client = stub.client().retries(2).build().expect("build");
+            let db = client.database();
+            let outcome = match path {
+                LIST => db.list().await.map(drop),
+                DOWNLOADS => db.downloads(None).await.map(drop),
+                _ => db.metadata("asn_v1").await.map(drop),
+            };
+            let Err(err) = outcome else { panic!("{path}, {value:?}: read as a date") };
+            assert_eq!(err.kind(), ErrorKind::ServerError, "{path}, {value:?}: {err}");
+            assert_eq!(err.status(), Some(200), "{path}, {value:?}: the status");
+            assert_eq!(stub.count(), 3, "{path}, {value:?}: retried like an outage");
+        });
+    }
+    while let Some(check) = checks.join_next().await {
+        check.expect("case");
+    }
+}
+
 /// A 404 from a misspelled database id is a CLIENT error. Letting it fall
 /// through to the retryable `server_error` default is the mistake three of the
 /// four VPNDetection SDKs shipped with.

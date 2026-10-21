@@ -85,6 +85,21 @@ cp -R .gen/src/models src/generated/models
 
 rm -rf .gen
 
+# Every date member reads through src/dates.rs, which takes only the form the
+# spec's `format` names: chrono's own serde reader is a relaxed one, and took
+# `2026-10-5` or `+0500` as some date (dates.rs). A date member in a shape
+# these three do not rewrite stops the script, rather than reading through
+# chrono unnoticed.
+perl -0777 -pi -e '
+    s/(#\[serde\(rename = "\w+", deserialize_with = ")Option::deserialize("\)\]\s+pub \w+: Option<chrono::DateTime<chrono::FixedOffset>>,)/${1}crate::dates::option_date_time$2/g;
+    s/(#\[serde\(rename = "\w+")(\)\]\s+pub \w+: chrono::DateTime<chrono::FixedOffset>,)/$1, deserialize_with = "crate::dates::date_time"$2/g;
+    s/(#\[serde\(rename = "\w+")(\)\]\s+pub \w+: chrono::NaiveDate,)/$1, deserialize_with = "crate::dates::date"$2/g;
+' src/generated/models/*.rs
+if grep -h -B1 -E '^\s*pub \w+: .*chrono::' src/generated/models/*.rs | grep -E '#\[serde' | grep -v 'crate::dates::' ; then
+    echo "a date member above reads through chrono's relaxed parser: teach this script its shape" >&2
+    exit 1
+fi
+
 # The repo is rustfmt-clean and CI gates on it, so the generator's output is
 # normalized here rather than left as a diff for the next `cargo fmt` to find.
 ./scripts/cargo.sh fmt

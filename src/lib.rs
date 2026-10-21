@@ -41,6 +41,7 @@
 
 mod client;
 mod database;
+mod dates;
 mod enums;
 mod error;
 mod generated;
