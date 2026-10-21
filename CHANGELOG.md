@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.3 - 2026-10-21
+
+### Fixes
+
+- Read a date only in RFC 3339's form, never chrono's relaxed one ([`0d7212d`](https://github.com/internetdata/sdk-rust/commit/0d7212d8a530afbcc7207b40887ef8ef8bc787cf))
+
 ## 2.7.2 - 2026-10-21
 
 ### Fixes
