@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.2 - 2026-10-21
+
+### Fixes
+
+- Re-pin the spec to 2026.10.21: a 403 for a refused address ([`0211d9d`](https://github.com/internetdata/sdk-rust/commit/0211d9df3828599b122dd034357b7a91eb94f253))
+
 ## 2.7.1 - 2026-10-18
 
 ### Fixes
