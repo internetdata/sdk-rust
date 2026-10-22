@@ -135,7 +135,7 @@ match client.database().metadata("bogon_ip_v1").await {
 
 `kind()` is one of `BadRequest`, `Unauthorized`, `Forbidden`, `RateLimited`, `QuotaExceeded`, `ServerError`, `Network` or `Io`, the last of which is a database transfer that could not be written or that ended early. `message()` carries the API's own reason, such as `NOT_LICENSED` or `UNKNOWN_DATASET`.
 
-Note that `RateLimited` and `QuotaExceeded` both arrive as HTTP 429 and are not the same thing. A rate limit is when the API faces extreme traffic bursts and so retrying later works; but a spent quota needs your allowance raised or the window to roll over. The library retries rate limits for you, but not if your quota is exceeded.
+`RateLimited` is a 429 that carries `Retry-After`, and the library retries it for you. `QuotaExceeded` is a 429 without one, which it never retries. InternetData's database API has no quota, so you won't see `QuotaExceeded` from it.
 
 ### TLS backends
 
