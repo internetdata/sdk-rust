@@ -46,6 +46,7 @@ mod enums;
 mod error;
 mod generated;
 mod oauth;
+mod objects;
 mod transport;
 
 // The OAuth unit tests reuse the integration suite's stub, which names this

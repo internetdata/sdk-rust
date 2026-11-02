@@ -338,6 +338,43 @@ async fn a_date_in_any_other_form_is_a_retried_server_error() {
     }
 }
 
+/// A `sample` row is an object, and the generator reads one as any JSON value,
+/// so a row of `1`, `"x"`, `[]`, `true` or `null` came back as the answer
+/// through 2.7.4.
+#[tokio::test]
+async fn a_sample_row_that_is_no_object_is_a_retried_server_error() {
+    const ROWS: [&str; 6] = ["1", r#""x""#, "[]", "[1,2]", "true", "null"];
+    let metadata = |row: &str| {
+        format!(
+            r#"{{"id":"asn_v1","updated":"2026-10-20","entries":2,"schema":{{}},"size":{{"csvgz":1}},"sample":{{"csvgz":[{{"asn":1}},{row}]}}}}"#
+        )
+    };
+    // Each case waits out two backoffs, so they run side by side.
+    let mut checks = tokio::task::JoinSet::new();
+    for row in ROWS {
+        let body = metadata(row);
+        checks.spawn(async move {
+            let stub = Stub::start([(METADATA.to_owned(), Route::ok(body))]).await;
+            let client = stub.client().retries(2).build().expect("build");
+            let Err(err) = client.database().metadata("asn_v1").await else {
+                panic!("{row}: read as a sample row")
+            };
+            assert_eq!(err.kind(), ErrorKind::ServerError, "{row}: {err}");
+            assert_eq!(err.status(), Some(200), "{row}: the status");
+            assert_eq!(stub.count(), 3, "{row}: retried like an outage");
+        });
+    }
+    while let Some(check) = checks.join_next().await {
+        check.expect("case");
+    }
+
+    let stub = Stub::start([(METADATA.to_owned(), Route::ok(metadata(r#"{"asn":2}"#)))]).await;
+    let client = stub.client().build().expect("build");
+    let meta = client.database().metadata("asn_v1").await.expect("metadata");
+    let sample = meta.sample.expect("the sample");
+    assert_eq!(sample["csvgz"], [serde_json::json!({"asn": 1}), serde_json::json!({"asn": 2})]);
+}
+
 /// A 404 from a misspelled database id is a CLIENT error. Letting it fall
 /// through to the retryable `server_error` default is the mistake three of the
 /// four VPNDetection SDKs shipped with.
