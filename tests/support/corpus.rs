@@ -49,7 +49,7 @@ pub struct ErrorExpect {
 
 /// The contract a listing has to keep: a private family is ABSENT for an
 /// organization that does not license it, never present with an `unlicensed`
-/// standing. The private ids are deliberately not in the corpus, since it is
+/// standing. The private IDs are deliberately not in the corpus, since it is
 /// committed into public repositories, so what is pinned is the rules a client
 /// must follow rather than the data they protect.
 #[derive(Deserialize)]

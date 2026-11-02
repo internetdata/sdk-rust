@@ -9,7 +9,7 @@
 use internetdata::{Client, Standing};
 
 /// The transfer is budgeted before it starts: `metadata` publishes a size per
-/// format, so a mistaken id fails this ceiling rather than pulling gigabytes.
+/// format, so a mistaken ID fails this ceiling rather than pulling gigabytes.
 const CEILING: i64 = 8 << 20;
 
 #[tokio::test]

@@ -36,7 +36,7 @@ impl<'a> DatabaseApi<'a> {
     /// never bought.
     ///
     /// A license covers a family while a download names one of its versions, so
-    /// the ids [`DatabaseApi::download`] and [`DatabaseApi::checksums`] take come from
+    /// the IDs [`DatabaseApi::download`] and [`DatabaseApi::checksums`] take come from
     /// [`Database::versions`] rather than from the family itself.
     ///
     /// This is the server's answer for this key, so a listing held from one key

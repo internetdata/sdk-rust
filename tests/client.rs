@@ -15,7 +15,7 @@ const CHECKSUM: &str = "/api/v2/database/checksum";
 const DOWNLOADS: &str = "/api/v2/database/downloads";
 const DOWNLOAD: &str = "/api/v2/database/download";
 
-/// A license is held against a FAMILY, and the ids a download takes are one
+/// A license is held against a FAMILY, and the IDs a download takes are one
 /// level further down. Reading `{id, formats}` off the family is how list ->
 /// download broke in every VPNDetection SDK, so the depth is pinned here.
 #[tokio::test]
@@ -375,7 +375,7 @@ async fn a_sample_row_that_is_no_object_is_a_retried_server_error() {
     assert_eq!(sample["csvgz"], [serde_json::json!({"asn": 1}), serde_json::json!({"asn": 2})]);
 }
 
-/// A 404 from a misspelled database id is a CLIENT error. Letting it fall
+/// A 404 from a misspelled database ID is a CLIENT error. Letting it fall
 /// through to the retryable `server_error` default is the mistake three of the
 /// four VPNDetection SDKs shipped with.
 #[tokio::test]

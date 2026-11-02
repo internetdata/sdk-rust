@@ -5,7 +5,7 @@
 // consumer cannot turn on. Only this suite tests what a stranger resolves.
 //
 // The transfer is budgeted before it starts. `metadata` publishes a size per
-// format, and that size is checked against the ceiling FIRST, so a mistaken id
+// format, and that size is checked against the ceiling FIRST, so a mistaken ID
 // can never quietly pull one of the gigabyte databases through CI.
 
 use internetdata::{DatabaseFormat, ErrorKind};

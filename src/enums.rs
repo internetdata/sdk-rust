@@ -50,7 +50,7 @@ macro_rules! wire_str {
 }
 
 // Not every database is built in every format: the `_provider` catalogs are
-// keyed by provider id rather than by IP range, so no MMDB exists for them.
+// keyed by provider ID rather than by IP range, so no MMDB exists for them.
 // `Database::versions` says which formats each version has. Plain comments
 // rather than doc ones, because rustdoc does not document what a macro
 // invocation expands to.

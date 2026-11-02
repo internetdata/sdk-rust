@@ -111,7 +111,7 @@ fn the_format_vocabulary_is_exactly_what_the_corpus_declares() {
 
 /// Every visibility rule the corpus names has a test here, and a rule it grows
 /// later fails this until one is written. The rules are what is pinned rather
-/// than the private ids they protect: this corpus is committed into public
+/// than the private IDs they protect: this corpus is committed into public
 /// repositories, so naming those would publish the customer relationship the
 /// contract exists to keep private.
 #[test]
@@ -189,7 +189,7 @@ async fn a_listing_is_never_reused_across_clients() {
 }
 
 /// One family, shaped exactly as the API serves it: a license held against the
-/// FAMILY, and the ids a download takes one level down in `versions`.
+/// FAMILY, and the IDs a download takes one level down in `versions`.
 fn listing(bases: &[&str]) -> String {
     let databases: Vec<Value> = bases
         .iter()
