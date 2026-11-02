@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.5 - 2026-11-02
+
+### Fixes
+
+- Refuse a sample row that is not a JSON object ([`8fa0e64`](https://github.com/internetdata/sdk-rust/commit/8fa0e6401cec60b1d154a2123aa11a5b03f7c911))
+
 ## 2.7.4 - 2026-10-29
 
 ### Fixes
