@@ -43,7 +43,7 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     assert!(family.expires.is_none(), "a license with no end date reads as None");
     assert!(family.starts.is_some(), "starts is present and non-null here");
     let version = &family.versions[0];
-    assert_eq!(version.id, "bogon_ip_v1", "the id a download takes lives on the VERSION");
+    assert_eq!(version.id, "bogon_ip_v1", "the ID a download takes lives on the VERSION");
     assert_eq!(version.version, 1);
     assert_eq!(version.formats, vec![DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
 }

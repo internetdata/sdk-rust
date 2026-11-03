@@ -48,7 +48,7 @@ let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).buil
 
 ### The catalog
 
-`list()` answers database FAMILIES. A license covers the family, while a download names one of its versions, so the id you pass to `download`, `checksums` and `metadata` comes from `versions`:
+`list()` answers database FAMILIES. A license covers the family, while a download names one of its versions, so the ID you pass to `download`, `checksums` and `metadata` comes from `versions`:
 
 ```rust
 for database in client.database().list().await? {

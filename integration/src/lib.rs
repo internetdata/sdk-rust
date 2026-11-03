@@ -156,7 +156,7 @@ pub fn assert_catalog_shape(catalog: &Catalog) {
         // corrected, which broke that path in every SDK.
         assert!(!family.versions.is_empty(), "{base} carries no versions");
         for version in &family.versions {
-            assert!(!version.id.is_empty(), "{base} has a version with no id");
+            assert!(!version.id.is_empty(), "{base} has a version with no ID");
             assert!(!version.formats.is_empty(), "{} is built in no format", version.id);
         }
 
