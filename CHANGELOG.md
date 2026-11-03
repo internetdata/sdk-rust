@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.7.6 - 2026-11-03
+
+### Fixes
+
+- Re-pin the spec to 2026.11.02: ID and IDs in its descriptions ([`80fdd9a`](https://github.com/internetdata/sdk-rust/commit/80fdd9a14519f47012b123090ba321e1b83e1457))
+- Write ID and IDs in prose, never id or ids ([`37a8df0`](https://github.com/internetdata/sdk-rust/commit/37a8df059fbd194e1ee87e4e00da44b76a28af51))
+
 ## 2.7.5 - 2026-11-02
 
 ### Fixes
