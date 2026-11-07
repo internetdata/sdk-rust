@@ -99,6 +99,17 @@ let url = client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).a
 
 `download_url` hands back the time-limited link the API redirects to, so you can run the transfer yourself with whatever tool you like. It authorizes itself and carries none of your credentials, so it is safe to pass on; the link authorizes the START of a transfer, so one already running is not interrupted when it lapses.
 
+Each of the three downloads the build that is live unless you name one. A `database.updated` webhook names the build it announces and carries its `sha256`, so a receiver that downloads after the next publish asks for that build, through the `_with` form of the call, to get the file the hash is of:
+
+```rust
+use internetdata::DownloadOptions;
+
+let options = DownloadOptions::new().build(build_from_the_webhook);
+let written = client.database().download_with("vpn_ip_v1", DatabaseFormat::Mmdb, "./vpn_ip_v1.mmdb", &options).await?;
+```
+
+A build is kept 7 days. Past that the call fails as a `BadRequest` with the message `BUILD_GONE`, and downloading without one fetches the live build.
+
 Not every database is built in every format, which is why `versions` lists the ones it has. Asking for another is a `BadRequest`, not a gap.
 
 ### Verifying a download

@@ -8,8 +8,8 @@
 use std::time::Duration;
 
 use internetdata::{
-    AuthorizationUrlOptions, Client, DatabaseFormat, DeviceAuthorizationOptions, ErrorKind,
-    OauthError, RegisterOptions,
+    AuthorizationUrlOptions, Client, DatabaseFormat, DeviceAuthorizationOptions, DownloadOptions,
+    ErrorKind, OauthError, RegisterOptions,
 };
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,6 +48,13 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     let raw = client.database().download_bytes("bogon_asn_v1", DatabaseFormat::Csvgz).await?;
 
     let url = client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
+
+    let build_from_the_webhook = String::from("20261105.0t53s5");
+    let options = DownloadOptions::new().build(build_from_the_webhook);
+    let written = client
+        .database()
+        .download_with("vpn_ip_v1", DatabaseFormat::Mmdb, "./vpn_ip_v1.mmdb", &options)
+        .await?;
 
     let sums = client.database().checksums("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
     println!("{}", sums.sha256);

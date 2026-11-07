@@ -95,8 +95,21 @@ impl<'a> DatabaseApi<'a> {
     /// link authorizes the START of a transfer, so one already running is not
     /// interrupted when it lapses.
     pub async fn download_url(&self, id: &str, format: impl Into<Format>) -> Result<String, Error> {
+        self.download_url_with(id, format, &DownloadOptions::default()).await
+    }
+
+    /// [`DatabaseApi::download_url`] for the file `options` names.
+    pub async fn download_url_with(
+        &self,
+        id: &str,
+        format: impl Into<Format>,
+        options: &DownloadOptions,
+    ) -> Result<String, Error> {
         let format = format.into();
-        let query = [("id", id), ("format", format.as_str())];
+        let mut query = vec![("id", id), ("format", format.as_str())];
+        if let Some(build) = options.build.as_deref().filter(|build| !build.is_empty()) {
+            query.push(("build", build));
+        }
         let timeout = self.client.timeout();
         with_retry(self.client.retries(), || {
             self.client.transport().get_redirect(DOWNLOAD, &query, timeout)
@@ -118,9 +131,20 @@ impl<'a> DatabaseApi<'a> {
         format: impl Into<Format>,
         path: impl AsRef<Path>,
     ) -> Result<u64, Error> {
+        self.download_with(id, format, path, &DownloadOptions::default()).await
+    }
+
+    /// [`DatabaseApi::download`] for the file `options` names.
+    pub async fn download_with(
+        &self,
+        id: &str,
+        format: impl Into<Format>,
+        path: impl AsRef<Path>,
+        options: &DownloadOptions,
+    ) -> Result<u64, Error> {
         let path = path.as_ref();
         let partial = partial_path(path);
-        let response = self.fetch_file(id, format.into()).await?;
+        let response = self.fetch_file(id, format.into(), options).await?;
 
         let outcome = match stream_to_file(response, &partial).await {
             Ok(written) => {
@@ -149,7 +173,17 @@ impl<'a> DatabaseApi<'a> {
         id: &str,
         format: impl Into<Format>,
     ) -> Result<Vec<u8>, Error> {
-        let mut response = self.fetch_file(id, format.into()).await?;
+        self.download_bytes_with(id, format, &DownloadOptions::default()).await
+    }
+
+    /// [`DatabaseApi::download_bytes`] for the file `options` names.
+    pub async fn download_bytes_with(
+        &self,
+        id: &str,
+        format: impl Into<Format>,
+        options: &DownloadOptions,
+    ) -> Result<Vec<u8>, Error> {
+        let mut response = self.fetch_file(id, format.into(), options).await?;
         let declared = response.content_length();
         // Allocated once from the declared length. A Vec grows by doubling, so
         // the last grow of a large database alone costs twice the file. Reserved
@@ -181,8 +215,13 @@ impl<'a> DatabaseApi<'a> {
     // redirect guard, because the presigned URL authorizes itself and forwarding
     // the API key would hand a credential to a host with no business holding it.
     // Transport::get_file builds that request without one.
-    async fn fetch_file(&self, id: &str, format: Format) -> Result<reqwest::Response, Error> {
-        let url = self.download_url(id, format).await?;
+    async fn fetch_file(
+        &self,
+        id: &str,
+        format: Format,
+        options: &DownloadOptions,
+    ) -> Result<reqwest::Response, Error> {
+        let url = self.download_url_with(id, format, options).await?;
         with_retry(self.client.retries(), || self.client.transport().get_file(&url)).await
     }
 
@@ -194,6 +233,30 @@ impl<'a> DatabaseApi<'a> {
         let timeout = self.client.timeout();
         with_retry(self.client.retries(), || self.client.transport().get_json(path, query, timeout))
             .await
+    }
+}
+
+/// Which file a download fetches: [`DatabaseApi::download_url_with`],
+/// [`DatabaseApi::download_with`] and [`DatabaseApi::download_bytes_with`].
+#[derive(Debug, Clone, Default)]
+pub struct DownloadOptions {
+    build: Option<String>,
+}
+
+impl DownloadOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// One build of the database, as a `database.updated` webhook names it
+    /// (`20261105.0t53s5`), so the file is the one whose `sha256` the webhook
+    /// carries. Unset, or set empty, a download fetches the build that is live.
+    /// A build is kept 7 days; past that the call fails as
+    /// [`ErrorKind::BadRequest`](crate::ErrorKind::BadRequest) with the message
+    /// `BUILD_GONE`.
+    pub fn build(mut self, build: impl Into<String>) -> Self {
+        self.build = Some(build.into());
+        self
     }
 }
 

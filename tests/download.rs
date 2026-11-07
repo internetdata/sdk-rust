@@ -10,7 +10,7 @@ mod support;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use internetdata::{DatabaseFormat, ErrorKind};
+use internetdata::{DatabaseFormat, DownloadOptions, ErrorKind};
 use support::{KEY, Route, Stub};
 
 const DATASET: &str = "bogon_ip_v1";
@@ -345,4 +345,55 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+#[tokio::test]
+async fn a_build_goes_on_the_download_request_and_none_without_one() {
+    let stub = serving(Route::ok(payload())).await;
+    let client = stub.client().build().expect("build");
+    let scratch = Scratch::new("named-build");
+    let named = DownloadOptions::new().build("20261105.0t53s5");
+    let db = client.database();
+
+    db.download_url_with(DATASET, DatabaseFormat::Csvgz, &named).await.expect("download_url");
+    db.download_bytes_with(DATASET, DatabaseFormat::Csvgz, &named).await.expect("download_bytes");
+    db.download_with(DATASET, DatabaseFormat::Csvgz, scratch.join("built.csv.gz"), &named)
+        .await
+        .expect("download");
+    db.download_url_with(DATASET, DatabaseFormat::Csvgz, &DownloadOptions::new().build(""))
+        .await
+        .expect("download_url with an empty build");
+    db.download_bytes(DATASET, DatabaseFormat::Csvgz).await.expect("download_bytes");
+
+    let targets: Vec<String> = stub
+        .requests()
+        .iter()
+        .filter(|call| call.path == DOWNLOAD)
+        .map(|call| call.header("x-stub-target").expect("no target recorded").to_owned())
+        .collect();
+    let named = format!("{DOWNLOAD}?id={DATASET}&format=csvgz&build=20261105.0t53s5");
+    let live = format!("{DOWNLOAD}?id={DATASET}&format=csvgz");
+    assert_eq!(targets, [named.clone(), named.clone(), named, live.clone(), live]);
+}
+
+#[tokio::test]
+async fn a_gone_build_is_a_bad_request_asked_once() {
+    let stub =
+        Stub::start([(DOWNLOAD.to_owned(), Route::json(410, r#"{"rc":"BUILD_GONE"}"#))]).await;
+    let client = stub.client().retries(3).build().expect("build");
+
+    let err = client
+        .database()
+        .download_url_with(
+            DATASET,
+            DatabaseFormat::Csvgz,
+            &DownloadOptions::new().build("20261029.aaaaaa"),
+        )
+        .await
+        .expect_err("a gone build must be refused");
+
+    assert_eq!(err.kind(), ErrorKind::BadRequest);
+    assert!(!err.retryable());
+    assert_eq!(err.message(), "BUILD_GONE");
+    assert_eq!(stub.count(), 1, "a 4xx must be issued exactly once");
 }

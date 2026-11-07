@@ -55,7 +55,7 @@ mod transport;
 extern crate self as internetdata;
 
 pub use client::{Client, ClientBuilder, DEFAULT_BASE_URL};
-pub use database::DatabaseApi;
+pub use database::{DatabaseApi, DownloadOptions};
 pub use error::{Error, ErrorKind};
 pub use oauth::{
     AuthorizationUrlOptions, ClientRegistration, DeviceAuthorization, DeviceAuthorizationOptions,
