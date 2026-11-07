@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.8.0 - 2026-11-07
+
+### Features
+
+- Download a named build: download_url_with, download_with and download_bytes_with take DownloadOptions ([`d3dd8fa`](https://github.com/internetdata/sdk-rust/commit/d3dd8facc9a8242289da0b4e2adf9cf9391a6e3e))
+
 ## 2.7.7 - 2026-11-06
 
 ### Fixes
