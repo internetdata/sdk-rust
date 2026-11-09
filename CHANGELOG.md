@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.8.1 - 2026-11-09
+
+### Fixes
+
+- Re-pin the spec to 2026.11.08: the token and revoke descriptions ([`7eb6ddd`](https://github.com/internetdata/sdk-rust/commit/7eb6ddd66206715bd909bdf0a09fd4f7e47ead54))
+
 ## 2.8.0 - 2026-11-07
 
 ### Features
