@@ -1,5 +1,6 @@
 // The published crate's OAuth accessor against staging, on a KEYLESS client, so
-// none of it needs the staging key or skips without it.
+// none of it needs the staging key or skips without it. The client is built on
+// the API host, so every call here also proves the accessor finds the apex.
 //
 // Only what is safe to repeat: discovery, revoking junk, exchanging a junk
 // device code, and at most ONE device authorization per run, because staging
@@ -8,7 +9,7 @@
 // asserted offline, against a client built with one.
 
 use internetdata::{Client, DeviceAuthorizationOptions, OauthError};
-use internetdata_integration::STAGING;
+use internetdata_integration::{STAGING, STAGING_APEX};
 
 /// The one client ID staging accepts, already public in the CLI's source.
 const CLIENT_ID: &str = "internetdata-cli";
@@ -19,7 +20,7 @@ const STAGING_CONSOLE: &str = "https://app-staging.internetdata.io";
 async fn staging_publishes_its_authorization_server_metadata() {
     let metadata = keyless().oauth().metadata().await.expect("metadata");
 
-    assert_eq!(metadata.issuer, STAGING);
+    assert_eq!(metadata.issuer, STAGING_APEX);
     assert!(metadata.device_authorization_endpoint.is_some(), "no device authorization endpoint");
     let methods = metadata.code_challenge_methods_supported.unwrap_or_default();
     assert!(methods.iter().any(|method| method == "S256"), "{methods:?}");
@@ -50,9 +51,9 @@ async fn a_device_authorization_starts_or_is_throttled() {
     match keyless().oauth().device_authorization_with(CLIENT_ID, opts).await {
         Ok(device) => {
             assert!(!device.device_code.is_empty() && !device.user_code.is_empty());
-            // The console's, not the apex's: the API is served at the apex here, so
-            // a page taken from the API host would be the landing page's, which a
-            // `/device` suffix alone still passes.
+            // The console's, not the apex's: the apex serves the landing pages, so a
+            // page taken from there would be the landing page's, which a `/device`
+            // suffix alone still passes.
             assert_eq!(device.verification_uri, format!("{STAGING_CONSOLE}/device"));
             assert!(device.expires_in > 0 && device.interval > 0, "{device:?}");
         }

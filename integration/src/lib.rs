@@ -1,12 +1,12 @@
-//! The staging fixtures the test files share: whether this run has a key at
-//! all, one catalog listing for the whole binary, and the shape rules a listing
-//! has to keep.
+//! The fixtures the test files share: whether this run has a key at all, one
+//! catalog listing for the whole binary, the shape rules a listing has to keep,
+//! and the rule a lookup answer keeps against the wire.
 //!
 //! Every request goes through [`recorder::Recorder`], a recording reverse proxy
-//! in front of staging, because reqwest offers no seam of its own and two of the
+//! in front of the API, because reqwest offers no seam of its own and two of the
 //! things that have to be proved here are about the REQUEST rather than the
-//! answer: that the key reached the wire, and that it did not travel any further
-//! than the API.
+//! answer: that the key reached the wire, or did not, and that it did not travel
+//! any further than the API.
 
 pub mod recorder;
 
@@ -18,12 +18,23 @@ use serde_json::Value;
 
 /// The deployment these tests run against, reached through the client's own
 /// base-URL option, which is what makes that option worth testing.
-pub const STAGING: &str = "https://staging.internetdata.io";
+pub const STAGING: &str = "https://api-staging.internetdata.io";
 
-/// The one credential this suite needs. There is no plan ladder here and no
-/// anonymous tier: an organization either licenses a database or it does not, so
-/// one read-only key licensed to the two smallest published databases exercises
-/// everything.
+/// Staging's apex, which issues its tokens and serves its OAuth endpoints.
+pub const STAGING_APEX: &str = "https://staging.internetdata.io";
+
+/// Production, which the keyless lookups run against too: they need no secret.
+pub const PROD: &str = "https://api.internetdata.io";
+
+/// The address, the AS and the domain the lookups ask about. AS112 announces
+/// four prefixes, so its full answer stays under what the recorder keeps.
+pub const PROBE: &str = "146.70.116.130";
+pub const PROBE_ASN: u32 = 112;
+pub const PROBE_DOMAIN: &str = "example.com";
+
+/// The one credential this suite has, a free-plan organization's. There is no
+/// plan ladder here: a keyless lookup is Unlimited's answer, the key's is its
+/// plan's, and the databases a read-only key is licensed to exercise the rest.
 pub const KEY_SECRET: &str = "INTERNETDATA_STAGING_KEY";
 
 /// 8 MiB, against databases of a few hundred and a few thousand bytes. Three
@@ -71,6 +82,52 @@ pub async fn client_for() -> (Client, Arc<Recorder>) {
     let client =
         Client::builder().base_url(&recorder.base_url).api_key(key).build().expect("building");
     (client, recorder)
+}
+
+/// A client with no key, pointed at a recorder in front of `origin`.
+pub async fn keyless_client_for(origin: &str) -> (Client, Arc<Recorder>) {
+    let recorder = Recorder::start(origin, None).await;
+    let client = Client::builder().base_url(&recorder.base_url).build().expect("building");
+    (client, recorder)
+}
+
+/// A lookup answer as the client holds it against the answer as it came off the
+/// wire: every member served reached the result, with the value served, and the
+/// result holds no member the wire did not serve, at every depth. That is what
+/// makes a served `false` survive and an absent member stay absent rather than
+/// defaulted.
+pub fn assert_same_answer(label: &str, wire: &Value, held: &Value) {
+    same_member(label, "the answer", wire, held);
+}
+
+fn same_member(label: &str, path: &str, wire: &Value, held: &Value) {
+    match (wire, held) {
+        (Value::Object(wire), Value::Object(held)) => {
+            for name in wire.keys() {
+                assert!(
+                    held.contains_key(name),
+                    "{label}: the wire served {path}.{name} and the client dropped it, or the \
+                     pinned spec does not model it yet"
+                );
+            }
+            for (name, value) in held {
+                let served = wire.get(name).unwrap_or_else(|| {
+                    panic!("{label}: the client holds {path}.{name}, which the wire never served")
+                });
+                same_member(label, &format!("{path}.{name}"), served, value);
+            }
+        }
+        (Value::Array(wire), Value::Array(held)) => {
+            assert_eq!(wire.len(), held.len(), "{label}: {path} lost or gained entries");
+            for (i, (served, value)) in wire.iter().zip(held).enumerate() {
+                same_member(label, &format!("{path}[{i}]"), served, value);
+            }
+        }
+        (Value::Number(served), Value::Number(value)) => {
+            assert_eq!(served.as_f64(), value.as_f64(), "{label}: {path} reads other than served");
+        }
+        _ => assert_eq!(wire, held, "{label}: {path} reads other than served"),
+    }
 }
 
 /// One listing for the whole binary. Memoized because every test here starts

@@ -1,9 +1,9 @@
 name: Integration
 
-# Exercises the crate as PUBLISHED on crates.io, against staging. CI compiles
-# this working tree; nothing there would notice a tag that never landed, an
-# `exclude` that dropped a module from the package, or a feature a consumer
-# cannot turn on.
+# Exercises the crate as PUBLISHED on crates.io, against staging, and production
+# for the keyless lookups. CI compiles this working tree; nothing there would
+# notice a tag that never landed, an `exclude` that dropped a module from the
+# package, or a feature a consumer cannot turn on.
 on:
   push:
     branches: [main]
