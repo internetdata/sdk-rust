@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.9.0 - 2026-11-13
+
+### Features
+
+- Look up addresses, AS numbers and domains, on api.internetdata.io ([`c83a0ca`](https://github.com/internetdata/sdk-rust/commit/c83a0ca40d1dd3642e147e26bd4ebad3c8af218e))
+
 ## 2.8.1 - 2026-11-09
 
 ### Fixes
