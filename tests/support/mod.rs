@@ -1,11 +1,12 @@
 // A stub origin that answers from a table and records what it was asked for, so
-// "the key never went to object storage" and "the redirect was not followed" are
-// asserted rather than assumed.
+// "the key never went to object storage", "never touched the network" and "kept
+// at most N in flight" are asserted rather than assumed.
 //
-// Hand-rolled on tokio rather than taken from a mock-HTTP crate because one of
-// the things that has to be proved here is outside what one offers: an origin
-// that PROMISES a multi-gigabyte body, so a followed redirect is caught by the
-// request count rather than by waiting for the transfer.
+// Hand-rolled on tokio rather than taken from a mock-HTTP crate because two of
+// the things that have to be proved here are outside what one offers: the PEAK
+// number of concurrent connections, and an origin that PROMISES a multi-gigabyte
+// body so a followed redirect is caught by the request count rather than by
+// waiting for the transfer.
 #![allow(dead_code)]
 
 use std::collections::{HashMap, VecDeque};
@@ -103,17 +104,29 @@ struct State {
     routes: HashMap<String, Route>,
     sequences: HashMap<String, VecDeque<Route>>,
     calls: Vec<Call>,
+    in_flight: usize,
+    peak: usize,
 }
 
 pub struct Stub {
     pub base_url: String,
     state: Arc<Mutex<State>>,
+    delay: Duration,
 }
 
 impl Stub {
     /// Binds an ephemeral port and starts serving. The accept loop is detached
     /// and dies with the test process.
     pub async fn start(routes: impl IntoIterator<Item = (String, Route)>) -> Arc<Self> {
+        Self::start_with_delay(routes, Duration::ZERO).await
+    }
+
+    /// The delay is what makes concurrent requests overlap, so a peak-in-flight
+    /// measurement has something to measure.
+    pub async fn start_with_delay(
+        routes: impl IntoIterator<Item = (String, Route)>,
+        delay: Duration,
+    ) -> Arc<Self> {
         let state = Arc::new(Mutex::new(State {
             routes: routes.into_iter().collect(),
             ..State::default()
@@ -121,17 +134,25 @@ impl Stub {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let port = listener.local_addr().expect("addr").port();
 
-        let stub =
-            Arc::new(Self { base_url: format!("http://127.0.0.1:{port}"), state: state.clone() });
+        let stub = Arc::new(Self {
+            base_url: format!("http://127.0.0.1:{port}"),
+            state: state.clone(),
+            delay,
+        });
         tokio::spawn(async move {
             while let Ok((socket, _)) = listener.accept().await {
                 let state = state.clone();
                 tokio::spawn(async move {
-                    let _ = serve(socket, state).await;
+                    let _ = serve(socket, state, delay).await;
                 });
             }
         });
         stub
+    }
+
+    /// Successful lookups for a set of addresses, which is what most cases want.
+    pub fn ok_routes(ips: &[&str]) -> Vec<(String, Route)> {
+        ips.iter().map(|ip| (format!("/{ip}"), Route::ok(answer(ip)))).collect()
     }
 
     /// Adds a route after binding, for a response whose body has to name the
@@ -170,6 +191,10 @@ impl Stub {
         self.state.lock().unwrap().calls.clone()
     }
 
+    pub fn peak_in_flight(&self) -> usize {
+        self.state.lock().unwrap().peak
+    }
+
     /// The full request target, query string included, for the call to `path`.
     /// A credential smuggled into a query string is only visible here.
     pub fn target(&self, path: &str) -> Option<String> {
@@ -183,16 +208,69 @@ impl Stub {
 /// Recognizable in a failure, and obviously not a real credential.
 pub const KEY: &str = "test-api-key-never-real";
 
+/// The least a lookup answer carries, Unlimited's members with nothing flagged,
+/// for an address.
+pub fn answer(ip: &str) -> String {
+    answer_value(ip).to_string()
+}
+
+/// [`answer`], as a value a test can change before serving it.
+pub fn answer_value(ip: &str) -> serde_json::Value {
+    serde_json::json!({
+        "ip": ip,
+        "is_bogon": false,
+        "is_tor": false,
+        "is_relay": false,
+        "is_anycast": false,
+        "is_carrier": false,
+        "is_satellite": false,
+        "is_ssh": false,
+        "is_smtp": false,
+        "is_web": false,
+        "is_dns_resolver": false,
+        "is_bittorrent": false,
+        "tor": {},
+        "relay": {},
+        "location": {
+            "continent": "EU",
+            "continent_name": "Europe",
+            "country": "AT",
+            "country_name": "Austria",
+            "timezone": "Europe/Vienna",
+            "currency_code": "EUR",
+            "currency_name": "Euro",
+            "currency_symbol": "E",
+            "flag_emoji": "AT",
+            "flag_unicode": "U+1F1E6 U+1F1F9",
+        },
+        "asn": {
+            "asn": 9009,
+            "name": "M247 Europe SRL",
+            "domain": "m247global.com",
+            "type": "hosting",
+            "prefix": "146.70.116.0/24",
+        },
+        "company": {"name": "M247 LTD Vienna Infrastructure", "domain": "m247.ro"},
+        "hostname": "",
+        "abuse": {"email": "abuse@m247.ro"},
+    })
+}
+
 /// Past this many requests the stub answers nothing at all, so a client caught
 /// in a loop fails its test's own time limit instead of growing without bound.
 pub const REQUEST_BOUND: usize = 64;
 
-async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Result<()> {
+async fn serve(
+    mut socket: TcpStream,
+    state: Arc<Mutex<State>>,
+    delay: Duration,
+) -> std::io::Result<()> {
     let call = match read_request(&mut socket).await? {
         Some(call) => call,
         None => return Ok(()),
     };
     let path = call.path.clone();
+    let body = call.body.clone();
 
     let over_bound = {
         let mut state = state.lock().unwrap();
@@ -204,24 +282,32 @@ async fn serve(mut socket: TcpStream, state: Arc<Mutex<State>>) -> std::io::Resu
     }
     let route = {
         let mut state = state.lock().unwrap();
-        match state.sequences.get_mut(&path) {
-            Some(queue) => Some(
-                queue.pop_front().unwrap_or_else(|| Route::json(599, r#"{"stub":"exhausted"}"#)),
-            ),
-            None => state.routes.get(&path).cloned(),
+        state.in_flight += 1;
+        state.peak = state.peak.max(state.in_flight);
+        if let Some(queue) = state.sequences.get_mut(&path) {
+            Some(queue.pop_front().unwrap_or_else(|| Route::json(599, r#"{"stub":"exhausted"}"#)))
+        } else if path == "/batch" {
+            Some(batch_route(&state.routes, &body))
+        } else {
+            state.routes.get(&path).cloned()
         }
     };
+    if !delay.is_zero() {
+        tokio::time::sleep(delay).await;
+    }
 
     // An unrouted path gets what the real API gives an unknown database, so a
     // test that forgets a route fails as a refusal rather than as a hang.
     let route = route.unwrap_or_else(|| Route::json(404, r#"{"rc":"UNKNOWN_DATASET"}"#));
-    write_response(&mut socket, &route).await
+    let result = write_response(&mut socket, &route).await;
+    state.lock().unwrap().in_flight -= 1;
+    result
 }
 
-/// The request line, its headers and any body. The path is stripped of any
-/// query string, which is the key routes are held under; the full target is
-/// kept in the synthetic `x-stub-target` header, so an assertion about a
-/// credential in a query string has something to read.
+/// The request line, its headers and any body. The path is percent-decoded and
+/// stripped of any query string, which is the key routes are held under; the
+/// full target is kept in the synthetic `x-stub-target` header, so an assertion
+/// about a credential in a query string has something to read.
 async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
     let mut request = Vec::new();
     let mut byte = [0u8; 1];
@@ -244,7 +330,7 @@ async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
             headers.push((name.trim().to_lowercase(), value.trim().to_owned()));
         }
     }
-    let path = target.split('?').next().unwrap_or(target).to_owned();
+    let path = percent_decode(target.split('?').next().unwrap_or(target));
     // A POST carries its body after the blank line, sized by Content-Length.
     let length = headers
         .iter()
@@ -262,6 +348,45 @@ async fn read_request(socket: &mut TcpStream) -> std::io::Result<Option<Call>> {
         body: String::from_utf8_lossy(&body).into_owned(),
         at: Instant::now(),
     }))
+}
+
+/// A POST /batch is answered the way the API answers one: every address the
+/// table knows is a result if its route is a 200 and an entry error otherwise,
+/// and an unknown address is the 400 the API gives a string that is not one.
+/// One call however many addresses, which is what the request counts measure.
+fn batch_route(routes: &HashMap<String, Route>, body: &str) -> Route {
+    let ips: Vec<String> = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| serde_json::from_value(value.get("ips")?.clone()).ok())
+        .unwrap_or_default();
+    let mut results = serde_json::Map::new();
+    let mut errors = serde_json::Map::new();
+    for ip in ips {
+        match routes.get(&format!("/{ip}")) {
+            None => {
+                errors.insert(
+                    ip,
+                    serde_json::json!({
+                        "status": 400,
+                        "error": "not a valid IP address, AS number or domain",
+                    }),
+                );
+            }
+            Some(route) if route.status == 200 => {
+                let value: serde_json::Value =
+                    serde_json::from_str(&route.body).unwrap_or(serde_json::Value::Null);
+                results.insert(ip, value);
+            }
+            Some(route) => {
+                let message = serde_json::from_str::<serde_json::Value>(&route.body)
+                    .ok()
+                    .and_then(|value| value.get("error")?.as_str().map(str::to_owned))
+                    .unwrap_or_default();
+                errors.insert(ip, serde_json::json!({"status": route.status, "error": message}));
+            }
+        }
+    }
+    Route::ok(serde_json::json!({"results": results, "errors": errors}).to_string())
 }
 
 async fn write_response(socket: &mut TcpStream, route: &Route) -> std::io::Result<()> {
@@ -304,4 +429,22 @@ async fn hold(socket: &mut TcpStream) -> std::io::Result<()> {
     let mut sink = [0u8; 256];
     while socket.read(&mut sink).await? > 0 {}
     Ok(())
+}
+
+fn percent_decode(path: &str) -> String {
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&path[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }

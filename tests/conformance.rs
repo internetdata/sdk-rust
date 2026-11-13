@@ -2,53 +2,57 @@
 //
 // The corpus is generated into testdata/ and is identical across languages, so a
 // behavior that drifts here fails here rather than surfacing as two client
-// libraries quietly disagreeing about the same refusal.
+// libraries quietly disagreeing about the same address or the same refusal.
 
 mod support;
 
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use internetdata::{Database, DatabaseFormat, LicenseType, Outcome, Standing};
+use internetdata::{
+    BatchOptions, Client, Database, DatabaseFormat, Error, LicenseType, LookupResponse, Outcome,
+    Standing, is_bogon,
+};
 use serde_json::{Value, json};
-use support::corpus;
+use support::corpus::{self, Corpus, ErrorCase};
 use support::{Route, Stub};
 
 const METADATA: &str = "/api/v2/database/metadata";
 const LIST: &str = "/api/v2/database/list";
+const PROBE: &str = "146.70.116.130";
 
-/// Every refusal the API can give, mapped the same way in every SDK. The two
-/// 429s differ ONLY by the presence of `Retry-After`, and the two 404s are
-/// CLIENT errors: letting a 4xx fall through to the retryable `server_error`
-/// default is what three of the four VPNDetection SDKs shipped.
+/// Every refusal the API can give, mapped the same way in every SDK and on both
+/// kinds of call: a lookup refusal names itself in `error`, a database one in
+/// `rc`, and either can reach either call. The two 429s differ ONLY by the
+/// presence of `Retry-After`, and every 4xx outside 401, 403 and 429 is a CLIENT
+/// error: letting one fall through to the retryable `server_error` default is
+/// what three of the four VPNDetection SDKs shipped.
 #[tokio::test]
 async fn every_refusal_is_classified_the_way_the_corpus_says() {
     let cases = corpus::load().errors;
     assert!(!cases.is_empty(), "the corpus has no error cases, so this test asserts nothing");
 
     for case in cases {
-        let mut route = Route::json(case.status, case.body.to_string());
-        for (name, value) in &case.headers {
-            route = route.header(name, value);
-        }
-        let stub = Stub::start([(METADATA.to_owned(), route)]).await;
-        // No retries, so a retryable failure surfaces rather than looping.
-        let client = stub.client().retries(0).build().expect("build");
+        for call in CALLS {
+            let stub = Stub::start([(call.path().to_owned(), refusal(&case))]).await;
+            // No retries, so a retryable failure surfaces rather than looping.
+            let client = stub.client().retries(0).build().expect("build");
 
-        let err = client.database().metadata("any_database_v1").await.expect_err(&case.name);
+            let err = call.run(&client).await.expect_err(&case.name);
 
-        assert_eq!(err.kind().as_str(), case.expect.kind, "{}: kind", case.name);
-        assert_eq!(err.retryable(), case.expect.retryable, "{}: retryable", case.name);
-        assert_eq!(err.status(), Some(case.status), "{}: status", case.name);
-        if let Some(message) = &case.expect.message {
-            assert_eq!(&err.message(), message, "{}: message", case.name);
+            let name = format!("{} on {}", case.name, call.name());
+            assert_eq!(err.kind().as_str(), case.expect.kind, "{name}: kind");
+            assert_eq!(err.retryable(), case.expect.retryable, "{name}: retryable");
+            assert_eq!(err.status(), Some(case.status), "{name}: status");
+            if let Some(message) = &case.expect.message {
+                assert_eq!(&err.message(), message, "{name}: message");
+            }
+            assert_eq!(
+                err.retry_after(),
+                case.expect.retry_after_seconds.map(Duration::from_secs),
+                "{name}: retry_after"
+            );
         }
-        assert_eq!(
-            err.retry_after(),
-            case.expect.retry_after_seconds.map(Duration::from_secs),
-            "{}: retry_after",
-            case.name
-        );
     }
 }
 
@@ -58,16 +62,346 @@ async fn every_refusal_is_classified_the_way_the_corpus_says() {
 #[tokio::test]
 async fn a_non_retryable_refusal_is_issued_exactly_once() {
     for case in corpus::load().errors.into_iter().filter(|case| !case.expect.retryable) {
-        let mut route = Route::json(case.status, case.body.to_string());
-        for (name, value) in &case.headers {
-            route = route.header(name, value);
+        for call in CALLS {
+            let stub = Stub::start([(call.path().to_owned(), refusal(&case))]).await;
+            let client = stub.client().no_cache().retries(3).build().expect("build");
+
+            call.run(&client).await.expect_err(&case.name);
+
+            assert_eq!(
+                stub.count(),
+                1,
+                "{} on {}: a non-retryable refusal was retried",
+                case.name,
+                call.name()
+            );
         }
-        let stub = Stub::start([(METADATA.to_owned(), route)]).await;
-        let client = stub.client().retries(3).build().expect("build");
+    }
+}
 
-        client.database().metadata("any_database_v1").await.expect_err(&case.name);
+/// The two kinds of call every refusal runs against.
+#[derive(Clone, Copy)]
+enum Call {
+    Lookup,
+    Metadata,
+}
 
-        assert_eq!(stub.count(), 1, "{}: a non-retryable refusal was retried", case.name);
+const CALLS: [Call; 2] = [Call::Lookup, Call::Metadata];
+
+impl Call {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Lookup => "a lookup",
+            Self::Metadata => "a database call",
+        }
+    }
+
+    fn path(self) -> &'static str {
+        match self {
+            Self::Lookup => "/146.70.116.130",
+            Self::Metadata => METADATA,
+        }
+    }
+
+    async fn run(self, client: &Client) -> Result<(), Error> {
+        match self {
+            Self::Lookup => client.lookup(PROBE).await.map(drop),
+            Self::Metadata => client.database().metadata("any_database_v1").await.map(drop),
+        }
+    }
+}
+
+fn refusal(case: &ErrorCase) -> Route {
+    let mut route = Route::json(case.status, case.body.to_string());
+    for (name, value) in &case.headers {
+        route = route.header(name, value);
+    }
+    route
+}
+
+#[test]
+fn is_bogon_matches_the_canonical_ranges() {
+    let cases = corpus::load().is_bogon;
+    assert!(!cases.is_empty(), "the corpus has no bogon cases");
+    for case in cases {
+        assert_eq!(
+            is_bogon(&case.ip),
+            case.expect,
+            "is_bogon({:?}) should be {} ({})",
+            case.ip,
+            case.expect,
+            case.why
+        );
+    }
+}
+
+// A listener on :: sees an IPv4 visitor as ::ffff:a.b.c.d, which read whole is
+// inside ::ffff:0:0/96, so an SDK that judged it whole answered every such
+// visitor as a bogon with no request made.
+#[tokio::test]
+async fn an_ipv4_mapped_address_is_the_ipv4_address_it_carries() {
+    for case in corpus::load().ipv4_mapped {
+        assert_eq!(is_bogon(&case.ip), case.expect, "is_bogon({:?}) ({})", case.ip, case.why);
+        let body = support::answer(&case.carries);
+        let routes = || [(format!("/{}", case.carries), Route::ok(body.clone()))];
+        let want_sent: Vec<String> =
+            if case.expect { Vec::new() } else { vec![case.carries.clone()] };
+
+        let stub = Stub::start(routes()).await;
+        let client = stub.client().build().expect("build");
+        let result = client.lookup(&case.ip).await.unwrap_or_else(|e| panic!("{}: {e}", case.ip));
+        assert_eq!(result.is_bogon, case.expect, "{}", case.ip);
+        assert_eq!(result.ip, case.carries, "{}", case.ip);
+        client.lookup(&case.carries).await.expect("a lookup of the carried address");
+        let paths: Vec<String> = stub.requests().into_iter().map(|call| call.path).collect();
+        let want_paths: Vec<String> = want_sent.iter().map(|ip| format!("/{ip}")).collect();
+        assert_eq!(paths, want_paths, "{}: one request, cached as {}", case.ip, case.carries);
+
+        let batch_stub = Stub::start(routes()).await;
+        let uncached = batch_stub.client().no_cache().build().expect("build");
+        let mut asked = vec![case.ip.clone()];
+        if case.carries != case.ip {
+            asked.push(case.carries.clone());
+        }
+        let got = uncached.lookup_batch(&asked, BatchOptions::new()).await;
+        assert_eq!(got.keys().cloned().collect::<Vec<_>>(), asked, "{}", case.ip);
+        let answer = got[&case.ip].as_ref().unwrap_or_else(|e| panic!("{}: {e}", case.ip));
+        assert_eq!(answer.ip, case.carries, "{}", case.ip);
+        let sent: Vec<String> = batch_stub
+            .requests()
+            .into_iter()
+            .filter_map(|call| serde_json::from_str::<Value>(&call.body).ok())
+            .flat_map(|body| body["ips"].as_array().cloned().unwrap_or_default())
+            .filter_map(|ip| ip.as_str().map(str::to_owned))
+            .collect();
+        assert_eq!(sent, want_sent, "{}", case.ip);
+    }
+}
+
+/// The corpus answer with the address filled in, member for member: a flag or a
+/// detail object left absent, or a member read as some other value, differs.
+#[tokio::test]
+async fn a_bogon_is_answered_locally_in_the_widest_shape() {
+    let data = corpus::load();
+    let stub = Stub::start([]).await;
+    let client = stub.client().build().expect("build");
+
+    for ip in ["10.0.0.1", "fe80::1", "::ffff:192.168.1.1"] {
+        let result = client.lookup(ip).await.expect("lookup");
+
+        let mut want = data.bogon_response.answer.clone();
+        let carried = ip.strip_prefix("::ffff:").unwrap_or(ip);
+        want.insert("ip".to_owned(), json!(carried));
+        let want: LookupResponse =
+            serde_json::from_value(Value::Object(want)).expect("the corpus answer decodes");
+        assert_eq!(result.answer, want, "{ip}: {}", data.bogon_response.why);
+        assert!(result.is_bogon, "{ip}: is_bogon marks a locally computed answer");
+    }
+    assert_eq!(stub.count(), 0, "a bogon must not reach the network");
+}
+
+/// Absent is "not in your plan" and present-and-false is "checked, and no", for
+/// every member, the paid ones inside a shared object included. Each served
+/// answer decodes and re-encodes as it was served, so nothing was dropped,
+/// defaulted or invented on the way through.
+#[tokio::test]
+async fn a_lookup_preserves_absent_versus_false_across_every_plan_shape() {
+    let cases = corpus::load().lookup;
+    for call in ["lookup", "lookupAsn", "lookupDomain"] {
+        assert!(cases.iter().any(|case| case.call == call), "the corpus has no {call} case");
+    }
+
+    for case in cases {
+        let target = match &case.target {
+            Value::String(target) => target.clone(),
+            other => other.to_string(),
+        };
+        let path = match case.call.as_str() {
+            "lookup" => format!("/{target}"),
+            "lookupAsn" => format!("/asn/{target}"),
+            "lookupDomain" => format!("/domain/{target}"),
+            call => panic!("{}: a call this suite does not know: {call}", case.name),
+        };
+        let stub = Stub::start([(path, Route::json(case.status, case.body.to_string()))]).await;
+        let client = stub.client().build().expect("build");
+
+        let wire = match case.call.as_str() {
+            "lookup" => to_wire(client.lookup(&target).await.map(|result| result.answer)),
+            "lookupAsn" => {
+                let asn = case.target.as_u64().and_then(|asn| u32::try_from(asn).ok());
+                to_wire(client.lookup_asn(asn.expect("an AS number")).await)
+            }
+            _ => to_wire(client.lookup_domain(&target).await),
+        }
+        .unwrap_or_else(|e| panic!("{}: {e}", case.name));
+
+        let name = &case.name;
+        assert_eq!(wire, case.body, "{name}: the answer does not re-encode as served");
+        for (member, want) in &case.expect.present {
+            let got = wire.get(member);
+            assert_eq!(got, Some(want), "{name}: {member} must be present and {want}");
+        }
+        for member in &case.expect.objects {
+            let got = wire.get(member);
+            let container = got.is_some_and(|value| value.is_object() || value.is_array());
+            assert!(container, "{name}: {member} must be present, an object or a list");
+        }
+        for member in &case.expect.empty {
+            let got = wire.get(member);
+            let empty = got.is_some_and(|value| *value == json!({}) || *value == json!([]));
+            assert!(empty, "{name}: {member} must be present and EMPTY, not {got:?}");
+        }
+        for member in &case.expect.absent {
+            let got = wire.get(member);
+            assert!(got.is_none(), "{name}: {member} must be ABSENT, not {got:?}");
+        }
+        for (object, members) in &case.expect.absent_in {
+            let held = wire.get(object).unwrap_or_else(|| panic!("{name}: {object} is absent"));
+            for member in members {
+                let got = held.get(member);
+                assert!(got.is_none(), "{name}: {object}.{member} must be ABSENT, not {got:?}");
+            }
+        }
+    }
+}
+
+/// Serializing the wire answer is what pins the names the API actually serves:
+/// an absent option is missing from the JSON, a present one is there and false.
+fn to_wire<T: serde::Serialize>(answer: Result<T, Error>) -> Result<Value, Error> {
+    answer.map(|answer| serde_json::to_value(answer).expect("serializing the answer"))
+}
+
+#[tokio::test]
+async fn a_batch_dedupes_short_circuits_bogons_and_keys_by_address() {
+    let data = corpus::load();
+    let case = data.batch_case("dedup-bogon-and-order-free-keying");
+    let stub = Stub::start(Stub::ok_routes(&["1.1.1.1", "8.8.8.8"])).await;
+    let client = stub.client().build().expect("build");
+
+    let got = client.lookup_batch(&case.input, BatchOptions::new()).await;
+
+    // Keyed by address, not positional, and in the order each was first seen.
+    assert_eq!(got.keys().cloned().collect::<Vec<_>>(), case.expect.keys);
+    assert_eq!(stub.count(), case.expect.http_requests.expect("httpRequests"));
+    for ip in &case.expect.bogon_keys {
+        let answer = got[ip].as_ref().unwrap_or_else(|e| panic!("{ip}: {e}"));
+        assert!(answer.is_bogon, "{ip} should be a local answer");
+    }
+}
+
+#[tokio::test]
+async fn one_bad_address_does_not_lose_the_rest_of_the_batch() {
+    let data = corpus::load();
+    let case = data.batch_case("partial-failure-does-not-fail-the-batch");
+    let stub = Stub::start(Stub::ok_routes(&["1.1.1.1"])).await;
+    let client = stub.client().retries(0).build().expect("build");
+
+    let got = client.lookup_batch(&case.input, BatchOptions::new()).await;
+
+    assert_eq!(got.keys().cloned().collect::<Vec<_>>(), case.expect.keys);
+    for ip in &case.expect.error_keys {
+        let err = got[ip].as_ref().expect_err(&format!("{ip} should carry its own error"));
+        assert_eq!(err.kind().as_str(), case.expect.error_kinds[ip], "{ip}");
+    }
+    let good = got["1.1.1.1"].as_ref().expect("the good address should still have answered");
+    assert_eq!(good.ip, "1.1.1.1");
+}
+
+#[tokio::test]
+async fn a_cache_hit_issues_no_second_request() {
+    let data = corpus::load();
+    let case = data.batch_case("cache-hit-issues-no-second-request");
+    let stub = Stub::start(Stub::ok_routes(&["1.1.1.1"])).await;
+    let client = stub.client().build().expect("build");
+
+    for _ in 0..case.repeat.unwrap_or(1) {
+        client.lookup_batch(&case.input, BatchOptions::new()).await;
+    }
+    assert_eq!(stub.count(), case.expect.http_requests.expect("httpRequests"));
+}
+
+/// Both the boundary and the absence of any cap: a batch of any size is chunks
+/// of 1000, never a refusal.
+#[tokio::test]
+async fn a_large_batch_is_sent_in_chunks_of_a_thousand() {
+    let data = corpus::load();
+    for name in ["chunks-of-one-thousand", "uncapped-input-is-chunked"] {
+        let case = data.batch_case(name);
+        let addrs: Vec<&str> = case.input.iter().map(String::as_str).collect();
+        let stub = Stub::start(Stub::ok_routes(&addrs)).await;
+        let client = stub.client().no_cache().build().expect("build");
+
+        let got = client.lookup_batch(&case.input, BatchOptions::new()).await;
+
+        assert_eq!(got.len(), case.expect.key_count.expect("keyCount"), "{name}");
+        assert_eq!(stub.count(), case.expect.http_requests.expect("httpRequests"), "{name}");
+        for ip in &case.input {
+            let answer = got[ip].as_ref().unwrap_or_else(|e| panic!("{name}: {ip}: {e}"));
+            assert_eq!(&answer.ip, ip, "{name}: {ip} should be answered for itself");
+        }
+    }
+}
+
+/// A per-entry failure carries no headers, so its 429 can only be a spent
+/// allowance, and a 500 is the server's; neither is retried per entry, because
+/// retries belong to the call and the call succeeded.
+#[tokio::test]
+async fn an_entry_error_is_classified_by_its_status() {
+    let data = corpus::load();
+    let case = data.batch_case("an-entry-error-is-classified-by-its-status");
+    let mut routes = Stub::ok_routes(&["1.1.1.1"]);
+    routes.push((
+        "/8.8.8.8".to_owned(),
+        Route::json(429, r#"{"error":"overage cap reached; raise or remove it in Billing"}"#),
+    ));
+    routes.push(("/9.9.9.9".to_owned(), Route::json(500, r#"{"error":"lookup failed"}"#)));
+    let stub = Stub::start(routes).await;
+    let client = stub.client().retries(3).build().expect("build");
+
+    let got = client.lookup_batch(&case.input, BatchOptions::new()).await;
+
+    assert_eq!(got.keys().cloned().collect::<Vec<_>>(), case.expect.keys);
+    for (ip, kind) in &case.expect.error_kinds {
+        let err = got[ip].as_ref().expect_err(&format!("{ip} should carry its error"));
+        assert_eq!(err.kind().as_str(), kind, "{ip}");
+    }
+    assert_eq!(stub.count(), case.expect.http_requests.expect("httpRequests"));
+}
+
+#[tokio::test]
+async fn two_clients_never_share_a_cached_answer() {
+    let stub = Stub::start(Stub::ok_routes(&["1.1.1.1"])).await;
+    let a = stub.client().api_key("key-a").build().expect("build");
+    let b = stub.client().api_key("key-b").build().expect("build");
+
+    a.lookup("1.1.1.1").await.expect("lookup");
+    b.lookup("1.1.1.1").await.expect("lookup");
+
+    // Two keys can be on different plans and so entitled to different fields; a
+    // shared cache would serve one of them the other's shape.
+    assert_eq!(stub.count(), 2);
+}
+
+#[tokio::test]
+async fn caching_can_be_turned_off() {
+    let stub = Stub::start(Stub::ok_routes(&["1.1.1.1"])).await;
+    let client = stub.client().no_cache().build().expect("build");
+
+    client.lookup("1.1.1.1").await.expect("lookup");
+    client.lookup("1.1.1.1").await.expect("lookup");
+
+    assert_eq!(stub.count(), 2);
+}
+
+/// Every generated range has to be reachable through the predicate, which is the
+/// only public surface the table has. The exact table-versus-corpus comparison
+/// is a unit test in src/bogon.rs, where the `pub(crate)` table is visible.
+#[test]
+fn every_generated_range_is_reachable_through_the_predicate() {
+    let data: Corpus = corpus::load();
+    for cidr in data.bogons.v4.iter().chain(data.bogons.v6.iter()) {
+        let host = cidr.split('/').next().expect("a cidr has a network part");
+        assert!(is_bogon(host), "{cidr}: the network address should be a bogon");
     }
 }
 

@@ -6,8 +6,8 @@ use serde::de::DeserializeOwned;
 
 use crate::error::{Error, ErrorKind, kind_for_status};
 
-/// Every request the crate makes: five database GETs with no request bodies,
-/// and the OAuth requests, which never carry the key.
+/// Every request the crate makes: the lookup and database GETs, the batch POST,
+/// and the OAuth requests, which never carry the key and go to the apex.
 ///
 /// The generated client is not used for this: its `ResponseContent` carries no
 /// headers, so a 429's `Retry-After` is unreachable, and its
@@ -17,17 +17,24 @@ use crate::error::{Error, ErrorKind, kind_for_status};
 pub(crate) struct Transport {
     http: reqwest::Client,
     base_url: String,
+    /// Where the OAuth requests go, the authorization server's own host.
+    oauth_base_url: String,
     api_key: Option<String>,
 }
 
 impl Transport {
-    pub(crate) fn new(http: reqwest::Client, base_url: String, api_key: Option<String>) -> Self {
-        Self { http, base_url, api_key }
+    pub(crate) fn new(
+        http: reqwest::Client,
+        base_url: String,
+        oauth_base_url: String,
+        api_key: Option<String>,
+    ) -> Self {
+        Self { http, base_url, oauth_base_url, api_key }
     }
 
-    /// What every path is appended to, with no trailing `/`.
-    pub(crate) fn base_url(&self) -> &str {
-        &self.base_url
+    /// What every OAuth path is appended to, with no trailing `/`.
+    pub(crate) fn oauth_base_url(&self) -> &str {
+        &self.oauth_base_url
     }
 
     /// A JSON GET, decoded into `T`.
@@ -43,20 +50,22 @@ impl Transport {
         timeout: Duration,
     ) -> Result<T, Error> {
         let response = self.send(path, query, timeout).await?;
-        let status = response.status().as_u16();
-        let retry_after = parse_retry_after(response.headers());
-        let body = response.text().await?;
-        if !(200..300).contains(&status) {
-            return Err(Error::from_response(status, retry_after, &body));
+        decode(response).await
+    }
+
+    /// A JSON POST, decoded into `T`. The one request with a body: the batch.
+    pub(crate) async fn post_json<B: serde::Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+        timeout: Duration,
+    ) -> Result<T, Error> {
+        let url = format!("{}{}", self.base_url, path);
+        let mut request = self.http.post(url).json(body).timeout(timeout);
+        if let Some(key) = &self.api_key {
+            request = request.header(AUTHORIZATION, format!("Bearer {key}"));
         }
-        // A body that will not decode is a transport-level failure rather than
-        // the API saying no, so it is retryable like any other malformed read.
-        serde_json::from_str(&body).map_err(|e| Error::Api {
-            kind: ErrorKind::ServerError,
-            message: format!("could not decode the response: {e}"),
-            status,
-            retry_after: None,
-        })
+        decode(request.send().await?).await
     }
 
     /// The `Location` of a redirect the client must NOT follow.
@@ -154,7 +163,7 @@ impl Transport {
     /// for it, and handing a credential to a request that does not need one
     /// only widens where it can leak.
     pub(crate) async fn get_keyless(&self, path: &str, timeout: Duration) -> Result<Answer, Error> {
-        let url = format!("{}{}", self.base_url, path);
+        let url = format!("{}{}", self.oauth_base_url, path);
         Answer::read(self.http.get(url).timeout(timeout).send().await?).await
     }
 
@@ -168,7 +177,7 @@ impl Transport {
         form: &[(&str, &str)],
         timeout: Duration,
     ) -> Result<Answer, Error> {
-        let url = format!("{}{}", self.base_url, path);
+        let url = format!("{}{}", self.oauth_base_url, path);
         Answer::read(self.http.post(url).form(form).timeout(timeout).send().await?).await
     }
 
@@ -180,7 +189,7 @@ impl Transport {
         body: String,
         timeout: Duration,
     ) -> Result<Answer, Error> {
-        let url = format!("{}{}", self.base_url, path);
+        let url = format!("{}{}", self.oauth_base_url, path);
         let request = self
             .http
             .post(url)
@@ -198,9 +207,10 @@ impl Transport {
     ) -> Result<reqwest::Response, Error> {
         let url = format!("{}{}", self.base_url, path);
         let mut request = self.http.get(url).query(query).timeout(timeout);
-        // Bearer only. The v1 endpoints take `?apikey=`, and the generated
-        // client sends a configured key BOTH ways whenever one is set; a v2 key
-        // belongs in one header, not in a query string a proxy will log.
+        // Bearer only. The API also takes `X-Api-Key` and `?apikey=`, and the
+        // generated client sends a configured key both of those ways whenever
+        // one is set; a key belongs in one header, not in a query string a
+        // proxy will log.
         if let Some(key) = &self.api_key {
             request = request.header(AUTHORIZATION, format!("Bearer {key}"));
         }
@@ -222,6 +232,40 @@ impl Answer {
         let retry_after = parse_retry_after(response.headers());
         Ok(Self { status, retry_after, body: response.text().await? })
     }
+}
+
+/// The JSON body of a 2xx, or the failure a non-2xx describes.
+async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, Error> {
+    let status = response.status().as_u16();
+    let retry_after = parse_retry_after(response.headers());
+    let body = response.text().await?;
+    if !(200..300).contains(&status) {
+        return Err(Error::from_response(status, retry_after, &body));
+    }
+    // A body that will not decode is a transport-level failure rather than
+    // the API saying no, so it is retryable like any other malformed read.
+    serde_json::from_str(&body).map_err(|e| Error::Api {
+        kind: ErrorKind::ServerError,
+        message: format!("could not decode the response: {e}"),
+        status,
+        retry_after: None,
+    })
+}
+
+/// Percent-encodes a path segment: an address for `GET /{ip}`, a domain for
+/// `GET /domain/{domain}`. An IPv6 literal contains colons, which are legal in a
+/// path segment but are worth encoding anyway so an intermediary cannot read one
+/// as an authority.
+pub(crate) fn encode_path_segment(segment: &str) -> String {
+    segment
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 /// `Retry-After` is seconds or an HTTP date. Its ABSENCE on a 429 is what makes

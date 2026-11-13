@@ -37,10 +37,36 @@ const SLOW_DOWN_STEP: i64 = 5;
 /// carries the client's API key, and none needs one, so a client built without
 /// a key works the same.
 ///
+/// The authorization server is the apex, not the API host, so these requests go
+/// to the base URL with `api.` dropped, or `api-<env>.` read as `<env>.`:
+/// `https://api.internetdata.io` signs in at `https://internetdata.io`. Any other
+/// base URL is used as given.
+///
 /// Reached through [`Client::oauth`].
 #[derive(Debug, Clone, Copy)]
 pub struct OauthApi<'a> {
     client: &'a Client,
+}
+
+/// The authorization server for an API base URL with no trailing `/`: the apex
+/// that issues InternetData's tokens, `api.` dropped and `api-<env>.` becoming
+/// `<env>.`, and any other base URL as given.
+pub(crate) fn authorization_server(base_url: &str) -> String {
+    let Ok(mut url) = reqwest::Url::parse(base_url) else {
+        return base_url.to_owned();
+    };
+    let apex = match url.host_str().and_then(|host| host.split_once('.')) {
+        Some(("api", rest)) => rest.to_owned(),
+        Some((label, rest)) => match label.strip_prefix("api-") {
+            Some(env) if !env.is_empty() => format!("{env}.{rest}"),
+            _ => return base_url.to_owned(),
+        },
+        None => return base_url.to_owned(),
+    };
+    if url.set_host(Some(&apex)).is_err() {
+        return base_url.to_owned();
+    }
+    url.as_str().trim_end_matches('/').to_owned()
 }
 
 impl<'a> OauthApi<'a> {
@@ -234,7 +260,7 @@ impl<'a> OauthApi<'a> {
                 params.push((name, value));
             }
         }
-        let mut url = format!("{}{AUTHORIZE_PATH}", self.client.transport().base_url());
+        let mut url = format!("{}{AUTHORIZE_PATH}", self.client.transport().oauth_base_url());
         for (i, (name, value)) in params.iter().enumerate() {
             url.push(if i == 0 { '?' } else { '&' });
             url.push_str(name);

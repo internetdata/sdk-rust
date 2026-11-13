@@ -26,11 +26,11 @@
 #
 # Only the models the hand-written layer uses are generated, selected by name.
 # The pinned spec is the whole published document, so it also describes v1, IAM
-# and OAuth: v1 and IAM are not wrapped, and the OAuth accessor, like the
-# VPNDetection crate's, hand-writes its three types. Generated, all of them would
-# be dead code, and IAM's would need the uuid and serde_with crates, which
-# nothing else here uses. Filtering the pinned spec instead would make the
-# committed copy something other than what was published.
+# and OAuth: v1 and IAM are not wrapped, and the OAuth accessor and the
+# entitlement, like the VPNDetection crate's, hand-write their types. Generated,
+# all of them would be dead code, and IAM's would need the uuid and serde_with
+# crates, which nothing else here uses. Filtering the pinned spec instead would
+# make the committed copy something other than what was published.
 
 set -euo pipefail
 
@@ -40,8 +40,8 @@ GENERATOR_IMAGE="${GENERATOR_IMAGE:-openapitools/openapi-generator-cli:v7.25.0}"
 
 PROPS="packageName=internetdata,supportAsync=true,hideGenerationTimestamp=true"
 
-# `DbChecksums` keeps a `Db` prefix from a schema shared with v1; in a crate that
-# is only a database client it is noise.
+# `DbChecksums` keeps a `Db` prefix from a schema shared with v1; under
+# `client.database()` it is noise.
 MODELS="DbChecksums=Checksums"
 
 # The three wrapper schemas are inline in the spec, so the generator names them
@@ -60,6 +60,13 @@ NAMES="${NAMES},databaseChecksumV2_200_response=ChecksumsResponse"
 SELECTED="Database:DatabaseVersion:DatabaseFormat:Standing:Download"
 SELECTED="${SELECTED}:DatabaseMetadata:DatabaseMetadataColumn:DbChecksums"
 SELECTED="${SELECTED}:DatabaseList:DownloadList:ChecksumsResponse"
+SELECTED="${SELECTED}:LookupResponse:Location:Asn:Company:AbuseContact:Whois:Rwhois"
+SELECTED="${SELECTED}:HostedDomains:WebDetail:BatchLookupRequest:BatchLookupError"
+SELECTED="${SELECTED}:AsnLookupResponse:AsnPrefix:DomainLookupResponse:DomainDns"
+SELECTED="${SELECTED}:DnsAddressRecord:DnsMxRecord:DnsNsRecord:DnsCnameRecord"
+SELECTED="${SELECTED}:DomainIpRanges:DomainIpRange:ClassDetail:ProxyDetail:PubproxyDetail"
+SELECTED="${SELECTED}:CarrierDetail:SatelliteDetail:SshDetail:SmtpDetail:DnsResolverDetail"
+SELECTED="${SELECTED}:BitTorrentDetail:DisposableDetail"
 
 rm -rf .gen
 mkdir -p .gen

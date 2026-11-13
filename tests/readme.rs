@@ -8,9 +8,104 @@
 use std::time::Duration;
 
 use internetdata::{
-    AuthorizationUrlOptions, Client, DatabaseFormat, DeviceAuthorizationOptions, DownloadOptions,
-    ErrorKind, OauthError, RegisterOptions,
+    AuthorizationUrlOptions, BatchOptions, Client, DatabaseFormat, DeviceAuthorizationOptions,
+    DownloadOptions, ErrorKind, OauthError, RegisterOptions,
 };
+
+async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new()?;
+
+    let result = client.lookup("146.70.116.130").await?;
+    println!("{}", result.location.country);
+    println!("{}", result.asn.name);
+    println!("{}", result.is_tor);
+
+    let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
+
+    let result = client.lookup("146.70.116.130").await?;
+    println!("{:?}", result.is_vpn);
+    println!("{:?}", result.location.city);
+
+    if let Some(vpn) = result.vpn.as_deref() {
+        println!("{:?}", vpn.provider);
+    }
+
+    let key = std::env::var("INTERNETDATA_API_KEY")?;
+    let client = Client::builder().api_key(key.clone()).concurrency(32).retries(4).build()?;
+    let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).build()?;
+
+    let result = client.my_ip().await?;
+    println!("{}", result.ip);
+
+    let acct = client.my_entitlement().await?;
+    println!("{}", acct.plan.key);
+    println!("{}", acct.usage.requests);
+    println!("{}", acct.usage.window_end);
+
+    let results =
+        client.lookup_batch(["146.70.116.130", "8.8.8.8", "1.1.1.1"], BatchOptions::new()).await;
+
+    for (ip, result) in &results {
+        match result {
+            Ok(result) => println!("{ip}: {}", result.location.country),
+            Err(err) => eprintln!("{ip}: {err}"),
+        }
+    }
+
+    let many_ips = vec!["146.70.116.130".to_owned()];
+    let results = client
+        .lookup_batch(
+            many_ips,
+            BatchOptions::new().concurrency(4).retries(4).timeout(Duration::from_secs(10)),
+        )
+        .await;
+
+    let asn = client.lookup_asn(9009).await?;
+    println!("{} {}", asn.name, asn.registry);
+
+    let domain = client.lookup_domain("example.com").await?;
+    println!("{}", domain.is_registered);
+
+    let client = Client::new()?;
+
+    let result = client.lookup("146.70.116.130").await?;
+    println!("{}", result.location.country);
+
+    let result2 = client.lookup("146.70.116.130").await?;
+    println!("{}", result2.location.country);
+
+    let client = Client::builder().cache(50_000, Duration::from_secs(6 * 60 * 60)).build()?;
+    let client_no_cache = Client::builder().no_cache().build()?;
+
+    let result = client.lookup("192.168.1.1").await?;
+    result.is_bogon;
+    result.is_tor;
+
+    client.is_bogon("10.0.0.1");
+    client.is_bogon("8.8.8.8");
+
+    internetdata::is_bogon("10.0.0.1");
+
+    match client.lookup("146.70.116.130").await {
+        Ok(result) => println!("{}", result.location.country),
+        Err(err) => println!("{} {}", err.kind(), err.retryable()),
+    }
+    let _ = [
+        ErrorKind::BadRequest,
+        ErrorKind::Unauthorized,
+        ErrorKind::Forbidden,
+        ErrorKind::RateLimited,
+        ErrorKind::QuotaExceeded,
+        ErrorKind::ServerError,
+        ErrorKind::Network,
+        ErrorKind::Io,
+    ];
+
+    result.is_hosting.unwrap_or(false);
+    result.is_hosting.is_none();
+    result.trial_expired == Some(true);
+    Ok(())
+}
 
 async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
@@ -18,10 +113,6 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
     for database in client.database().list().await? {
         println!("{} ({}): {}", database.name, database.standing, database.summary);
     }
-
-    let key = std::env::var("INTERNETDATA_API_KEY")?;
-    let client = Client::builder().api_key(key.clone()).retries(4).build()?;
-    let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).build()?;
 
     for database in client.database().list().await? {
         println!("{} is {}", database.base, database.standing);
@@ -68,21 +159,6 @@ async fn snippets() -> Result<(), Box<dyn std::error::Error>> {
             attempt.http_status.unwrap_or(0)
         );
     }
-
-    match client.database().metadata("bogon_ip_v1").await {
-        Ok(meta) => println!("{}", meta.entries),
-        Err(err) => println!("{} {}", err.kind(), err.retryable()),
-    }
-    let _ = [
-        ErrorKind::BadRequest,
-        ErrorKind::Unauthorized,
-        ErrorKind::Forbidden,
-        ErrorKind::RateLimited,
-        ErrorKind::QuotaExceeded,
-        ErrorKind::ServerError,
-        ErrorKind::Network,
-        ErrorKind::Io,
-    ];
     Ok(())
 }
 
@@ -135,9 +211,8 @@ async fn register_snippet() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn blocking_snippet() -> Result<(), Box<dyn std::error::Error>> {
-    let key = std::env::var("INTERNETDATA_API_KEY")?;
     let runtime = tokio::runtime::Runtime::new()?;
-    let client = Client::builder().api_key(key).build()?;
-    let databases = runtime.block_on(client.database().list())?;
+    let client = Client::new()?;
+    let result = runtime.block_on(client.lookup("146.70.116.130"))?;
     Ok(())
 }

@@ -11,8 +11,9 @@
 // The generator's REQUEST functions are deliberately not taken; scripts/
 // generate.sh says why, and transport.rs is what replaces them.
 //
-// Only the v2 database's models are generated; scripts/generate.sh selects them
-// by name, and says why v1, IAM and OAuth are left out.
+// Only the lookups' and the v2 database's models are generated;
+// scripts/generate.sh selects them by name, and says why v1, IAM, OAuth and the
+// entitlement are left out.
 //
 // Generated code is held to the generator's standards, not ours, and its doc
 // comments carry the spec's descriptions as written, bare URLs included.

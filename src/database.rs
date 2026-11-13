@@ -15,8 +15,8 @@ const CHECKSUM: &str = "/api/v2/database/checksum";
 const DOWNLOADS: &str = "/api/v2/database/downloads";
 const DOWNLOAD: &str = "/api/v2/database/download";
 
-/// The database catalog and its downloads, which is the whole of InternetData's
-/// public surface.
+/// The database catalog and its downloads, for keys carrying the `db.download`
+/// scope.
 ///
 /// Reached through [`Client::database`]. Named `DatabaseApi` rather than
 /// `Database` because [`Database`] is already the shape of one database family,

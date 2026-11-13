@@ -1,11 +1,6 @@
 // The shared conformance corpus, generated into testdata/ and
 // identical across every InternetData SDK. It is embedded rather than read at
 // run time so a missing or malformed corpus is a build failure.
-//
-// Deliberately smaller than VPNDetection's: this API has no per-address lookup,
-// so there is no bogon table, no plan ladder and no batch to pin. What is left
-// is error mapping and the enum vocabularies, which is exactly where those SDKs
-// drifted.
 #![allow(dead_code)]
 
 use std::collections::HashMap;
@@ -23,8 +18,107 @@ pub struct Corpus {
     pub standings: Vec<String>,
     pub license_type: Vec<String>,
     pub formats: Vec<String>,
+    #[serde(rename = "bogonResponse")]
+    pub bogon_response: BogonResponse,
+    #[serde(rename = "isBogon")]
+    pub is_bogon: Vec<BogonCase>,
+    #[serde(rename = "ipv4Mapped")]
+    pub ipv4_mapped: Vec<MappedCase>,
+    pub lookup: Vec<LookupCase>,
+    pub batch: Vec<BatchCase>,
+    pub bogons: Bogons,
     pub visibility: Visibility,
     pub oauth: Oauth,
+}
+
+impl Corpus {
+    pub fn batch_case(&self, name: &str) -> &BatchCase {
+        self.batch
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("the corpus has no batch case named {name:?}"))
+    }
+}
+
+/// What a bogon is answered with, before its address is filled in.
+#[derive(Deserialize)]
+pub struct BogonResponse {
+    pub why: String,
+    pub answer: serde_json::Map<String, Value>,
+}
+
+#[derive(Deserialize)]
+pub struct BogonCase {
+    pub ip: String,
+    pub expect: bool,
+    pub why: String,
+}
+
+#[derive(Deserialize)]
+pub struct MappedCase {
+    pub ip: String,
+    pub carries: String,
+    pub expect: bool,
+    pub why: String,
+}
+
+/// One served answer and what must hold of it once decoded: `call` names the
+/// lookup that asks (`lookup`, `lookupAsn`, `lookupDomain`) and `target` what it
+/// asks about, an address, an AS number or a domain.
+#[derive(Deserialize)]
+pub struct LookupCase {
+    pub name: String,
+    pub why: String,
+    pub call: String,
+    pub target: Value,
+    pub status: u16,
+    pub body: Value,
+    pub expect: LookupExpect,
+}
+
+#[derive(Deserialize)]
+pub struct LookupExpect {
+    #[serde(default)]
+    pub present: serde_json::Map<String, Value>,
+    #[serde(default)]
+    pub objects: Vec<String>,
+    #[serde(default)]
+    pub empty: Vec<String>,
+    #[serde(default)]
+    pub absent: Vec<String>,
+    #[serde(default, rename = "absentIn")]
+    pub absent_in: HashMap<String, Vec<String>>,
+}
+
+#[derive(Deserialize)]
+pub struct BatchCase {
+    pub name: String,
+    pub input: Vec<String>,
+    #[serde(default)]
+    pub repeat: Option<u32>,
+    pub expect: BatchExpect,
+}
+
+#[derive(Deserialize)]
+pub struct BatchExpect {
+    #[serde(default)]
+    pub keys: Vec<String>,
+    #[serde(rename = "httpRequests")]
+    pub http_requests: Option<usize>,
+    #[serde(default, rename = "bogonKeys")]
+    pub bogon_keys: Vec<String>,
+    #[serde(default, rename = "errorKeys")]
+    pub error_keys: Vec<String>,
+    #[serde(default, rename = "keyCount")]
+    pub key_count: Option<usize>,
+    #[serde(default, rename = "errorKinds")]
+    pub error_kinds: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+pub struct Bogons {
+    pub v4: Vec<String>,
+    pub v6: Vec<String>,
 }
 
 #[derive(Deserialize)]
