@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.10.1 - 2026-11-14
+
+### Fixes
+
+- Re-pin the spec to 2026.11.13 as republished: the ip.lookup scope 403 ([`cb80c3d`](https://github.com/internetdata/sdk-rust/commit/cb80c3db7f5cd9428ac9e5fca2a9027dab850fac))
+
 ## 2.10.0 - 2026-11-14
 
 ### Features
