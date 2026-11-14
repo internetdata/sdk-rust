@@ -56,6 +56,7 @@ mod error;
 mod flight;
 mod generated;
 mod lookup;
+pub mod middleware;
 mod oauth;
 mod objects;
 mod transport;

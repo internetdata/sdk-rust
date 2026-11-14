@@ -29,6 +29,7 @@ pub struct Corpus {
     pub bogons: Bogons,
     pub visibility: Visibility,
     pub oauth: Oauth,
+    pub middleware: Middleware,
 }
 
 impl Corpus {
@@ -429,4 +430,39 @@ where
     T: Deserialize<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)
+}
+
+/// The framework middleware's half of the corpus: how a block condition is
+/// evaluated, and which conditions must be refused outright.
+#[derive(Deserialize)]
+pub struct Middleware {
+    pub conditions: Vec<ConditionCase>,
+    #[serde(rename = "invalidConditions")]
+    pub invalid_conditions: Vec<InvalidConditionCase>,
+}
+
+#[derive(Deserialize)]
+pub struct ConditionCase {
+    pub name: String,
+    pub why: String,
+    #[serde(default)]
+    pub bogon: Option<String>,
+    #[serde(default)]
+    pub body: Option<Value>,
+    pub condition: Value,
+    pub expect: ConditionExpect,
+}
+
+#[derive(Deserialize)]
+pub struct ConditionExpect {
+    pub blocked: bool,
+    #[serde(default)]
+    pub missing: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct InvalidConditionCase {
+    pub name: String,
+    pub why: String,
+    pub condition: Value,
 }
