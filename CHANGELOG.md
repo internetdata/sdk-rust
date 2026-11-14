@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 2.10.0 - 2026-11-14
+
+### Features
+
+- Add the framework middleware core ([`6bcb983`](https://github.com/internetdata/sdk-rust/commit/6bcb98343295bebd31183d2cf48e4e4b32be9901))
+
 ## 2.9.0 - 2026-11-13
 
 ### Features
