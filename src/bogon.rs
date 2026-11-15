@@ -7,7 +7,7 @@ use ipnet::IpNet;
 
 use crate::bogons::{BOGON_V4, BOGON_V6};
 use crate::lookup::Lookup;
-use crate::models::{AbuseContact, Asn, Company, Location, LookupResponse};
+use crate::models::{AbuseContact, Asn, Company, HostedDomains, Location, LookupResponse};
 
 /// Whether an address is private, loopback, link-local, documentation,
 /// multicast or otherwise not routable on the public internet, including the
@@ -45,7 +45,8 @@ pub(crate) fn unmapped(ip: &str) -> Cow<'_, str> {
 /// The answer a bogon gets: the full shape the API answers one on a paid plan,
 /// every flag present and false, every detail object present and empty (Web
 /// IP's list empty), every key of the location, AS, company, abuse, whois and
-/// rwhois objects empty and every number 0, and `is_bogon` true.
+/// rwhois objects empty and every number 0, hosted domains 0 with an empty
+/// list, and `is_bogon` true.
 ///
 /// Deliberately the WIDEST shape whatever plan you are on, so a caller must not
 /// infer which fields their plan includes from a bogon answer.
@@ -116,7 +117,7 @@ pub(crate) fn bogon_lookup(ip: &str) -> Lookup {
             }),
             whois: Some(Box::default()),
             rwhois: Some(Box::default()),
-            hosted_domains: Some(Box::default()),
+            hosted_domains: Some(Box::new(HostedDomains { total: 0, domains: Some(Vec::new()) })),
             // Only a free-plan key's answers carry it, and a bogon is answered here.
             trial_expired: None,
         },
