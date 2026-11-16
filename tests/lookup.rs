@@ -566,7 +566,7 @@ const ENTITLEMENT_BODY: &str = r#"{
     "expires": null,
     "allowed_cidrs": []
   },
-  "plan": {"key": "max", "tier": "max"},
+  "plan": {"key": "max", "name": "Max", "tier": "max"},
   "usage": {
     "requests": 580,
     "quota": 5000000,
@@ -608,6 +608,7 @@ async fn my_entitlement_reports_the_plan_and_the_usage() {
 
     assert_eq!(ent.plan.key, "max");
     assert_eq!(ent.plan.tier, "max");
+    assert_eq!(ent.plan.name, "Max");
     assert_eq!(ent.usage.requests, 580);
     assert_eq!(ent.usage.quota, 5_000_000);
     // None means NEVER stop, which is not the same as a limit of zero.

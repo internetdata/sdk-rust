@@ -2,6 +2,8 @@ pub mod abuse_contact;
 pub use self::abuse_contact::AbuseContact;
 pub mod asn;
 pub use self::asn::Asn;
+pub mod asn_hosted_domains;
+pub use self::asn_hosted_domains::AsnHostedDomains;
 pub mod asn_lookup_response;
 pub use self::asn_lookup_response::AsnLookupResponse;
 pub mod asn_prefix;

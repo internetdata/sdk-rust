@@ -91,9 +91,9 @@ impl<'a> DatabaseApi<'a> {
     /// The API answers 302 to object storage and the link authorizes itself, so
     /// what comes back carries no credential of yours and can be handed to
     /// anything that speaks HTTP. It is returned rather than followed because
-    /// the caller decides how to transfer a file that reaches gigabytes; the
-    /// link authorizes the START of a transfer, so one already running is not
-    /// interrupted when it lapses.
+    /// the caller decides how to transfer a file that reaches gigabytes. The
+    /// link only has to be valid when a transfer starts, so one already running
+    /// isn't cut off when it lapses.
     pub async fn download_url(&self, id: &str, format: impl Into<Format>) -> Result<String, Error> {
         self.download_url_with(id, format, &DownloadOptions::default()).await
     }

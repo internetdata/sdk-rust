@@ -89,7 +89,7 @@ pub use models::{
     HostedDomains, Location, LookupResponse, ProxyDetail, PubproxyDetail, Rwhois, SatelliteDetail,
     SmtpDetail, SshDetail, WebDetail, Whois,
 };
-pub use models::{AsnLookupResponse, AsnPrefix};
+pub use models::{AsnHostedDomains, AsnLookupResponse, AsnPrefix};
 pub use models::{
     Checksums, ChecksumsResponse, Database, DatabaseMetadata, DatabaseMetadataColumn,
     DatabaseVersion, Download,

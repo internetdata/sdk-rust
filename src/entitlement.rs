@@ -38,8 +38,14 @@ pub struct EntitlementApikey {
 /// The plan behind the key, and the field tier it buys.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EntitlementPlan {
-    /// The plan the organization is on, e.g. `max`.
+    /// The plan the organization is on, as an identifier that is never renamed
+    /// or reused: `free` for the free plan, or a paid plan's key. Compare
+    /// against it, and show `name`.
     pub key: String,
+    /// The plan's name as the site and console show it: `Unlimited` for the
+    /// free plan. Show this rather than a name built from `key`, which never
+    /// changes while a name can.
+    pub name: String,
     /// The field tier, which decides how much of a lookup answer comes back:
     /// `free`, `starter`, `scale` or `max`. What each tier includes is
     /// documented on the lookup endpoint rather than repeated here.

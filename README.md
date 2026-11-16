@@ -77,6 +77,7 @@ Same answer `lookup` would give for that address, and the same cost against your
 ```rust
 let acct = client.my_entitlement().await?;
 println!("{}", acct.plan.key);            // free
+println!("{}", acct.plan.name);           // Unlimited, the name to show
 println!("{}", acct.usage.requests);      // 42
 println!("{}", acct.usage.window_end);    // when the allowance resets
 ```
@@ -255,7 +256,7 @@ let raw = client.database().download_bytes("bogon_asn_v1", DatabaseFormat::Csvgz
 let url = client.database().download_url("bogon_ip_v1", DatabaseFormat::Csvgz).await?;
 ```
 
-`download_url` hands back the time-limited link the API redirects to, so you can run the transfer yourself with whatever tool you like. It authorizes itself and carries none of your credentials, so it is safe to pass on; the link authorizes the START of a transfer, so one already running is not interrupted when it lapses.
+`download_url` hands back the time-limited link the API redirects to, so you can run the transfer yourself with whatever tool you like. It authorizes itself and carries none of your credentials, so it is safe to pass on. The link only has to be valid when a transfer starts, so one already running isn't cut off when it lapses.
 
 Each of the three downloads the build that is live unless you name one. A `database.updated` webhook names the build it announces and carries its `sha256`, so a receiver that downloads after the next publish asks for that build, through the `_with` form of the call, to get the file the hash is of:
 
