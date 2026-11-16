@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.0.0 - 2026-11-16
+
+### Breaking changes
+
+- Hand back a vocabulary value this release was not built with ([`1860087`](https://github.com/internetdata/sdk-rust/commit/1860087cdf73c3c27c0cd81ec1bc87cee92ff3c5))
+
 ## 2.12.0 - 2026-11-16
 
 ### Features
