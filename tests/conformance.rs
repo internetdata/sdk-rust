@@ -410,6 +410,7 @@ fn the_standing_vocabulary_is_exactly_what_the_corpus_declares() {
     let wire = [Standing::Licensed, Standing::Expired, Standing::Unlicensed];
     assert_eq!(spellings(&wire), set(&corpus::load().standings));
     assert_readers_match_the_wire(&wire);
+    assert_readers_match_the_wire(&[Standing::Other("suspended".to_owned())]);
 }
 
 #[test]
@@ -417,6 +418,7 @@ fn the_license_type_vocabulary_is_exactly_what_the_corpus_declares() {
     let wire = [LicenseType::Evaluation, LicenseType::Standard, LicenseType::Redistribute];
     assert_eq!(spellings(&wire), set(&corpus::load().license_type));
     assert_readers_match_the_wire(&wire);
+    assert_readers_match_the_wire(&[LicenseType::Other("oem".to_owned())]);
 }
 
 /// `Outcome` is not in the corpus - a download history is a per-organization
@@ -431,6 +433,7 @@ fn the_outcome_readers_agree_with_the_wire() {
         Outcome::Expired,
         Outcome::Unknown,
         Outcome::Unavailable,
+        Outcome::Other("throttled".to_owned()),
     ]);
 }
 
@@ -440,7 +443,11 @@ fn the_outcome_readers_agree_with_the_wire() {
 fn the_format_vocabulary_is_exactly_what_the_corpus_declares() {
     let expected = set(&corpus::load().formats);
     assert_eq!(spellings(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]), expected);
-    assert_readers_match_the_wire(&[DatabaseFormat::Csvgz, DatabaseFormat::Mmdb]);
+    assert_readers_match_the_wire(&[
+        DatabaseFormat::Csvgz,
+        DatabaseFormat::Mmdb,
+        DatabaseFormat::Other("parquet".to_owned()),
+    ]);
 }
 
 /// Every visibility rule the corpus names has a test here, and a rule it grows
@@ -574,7 +581,7 @@ fn spellings<T: serde::Serialize>(variants: &[T]) -> BTreeSet<String> {
 /// the kind of wrong nothing else here would catch.
 fn assert_readers_match_the_wire<T>(variants: &[T])
 where
-    T: serde::Serialize + std::fmt::Display + Copy,
+    T: serde::Serialize + std::fmt::Display,
 {
     for variant in variants {
         let sent = serde_json::to_value(variant)

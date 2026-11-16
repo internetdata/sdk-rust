@@ -6,6 +6,10 @@
 //! catalog listing or a log line read as the API's own words. The conformance
 //! suite asserts each one against what serde serializes, so a reader cannot
 //! drift from the value actually sent.
+//!
+//! Each enum is `#[non_exhaustive]`, with an `Other` variant carrying a value
+//! this release was not built with (scripts/generate.sh), so both readers print
+//! that value as served.
 
 use std::fmt;
 
@@ -14,13 +18,17 @@ use crate::models::download::Outcome;
 use crate::models::{DatabaseFormat, Standing};
 
 /// Writes the `as_str` + `Display` pair for an enum the generator leaves bare.
+/// The generated `Display` of a named enum is removed by scripts/generate.sh,
+/// since its match has no arm for `Other`.
 macro_rules! wire_spelling {
     ($type:ty { $($variant:ident => $wire:literal),+ $(,)? }) => {
         impl $type {
-            /// The spelling the API uses, which is not the Rust variant name.
-            pub fn as_str(self) -> &'static str {
+            /// The spelling the API uses, which is not the Rust variant name,
+            /// and for `Other` the value as the API served it.
+            pub fn as_str(&self) -> &str {
                 match self {
-                    $(Self::$variant => $wire),+
+                    $(Self::$variant => $wire,)+
+                    Self::Other(value) => value,
                 }
             }
         }
@@ -33,30 +41,14 @@ macro_rules! wire_spelling {
     };
 }
 
-/// `as_str` alone, for an enum the spec NAMES - the generator emits a Display
-/// for those, printing the same wire spelling, so writing a second one is a
-/// conflicting impl rather than a duplicate.
-macro_rules! wire_str {
-    ($type:ty { $($variant:ident => $wire:literal),+ $(,)? }) => {
-        impl $type {
-            /// The spelling the API uses, which is not the Rust variant name.
-            pub fn as_str(self) -> &'static str {
-                match self {
-                    $(Self::$variant => $wire),+
-                }
-            }
-        }
-    };
-}
-
 // Not every database is built in every format: the `_provider` catalogs are
 // keyed by provider ID rather than by IP range, so no MMDB exists for them.
 // `Database::versions` says which formats each version has. Plain comments
 // rather than doc ones, because rustdoc does not document what a macro
 // invocation expands to.
-wire_str!(DatabaseFormat { Csvgz => "csvgz", Mmdb => "mmdb" });
+wire_spelling!(DatabaseFormat { Csvgz => "csvgz", Mmdb => "mmdb" });
 
-wire_str!(Standing {
+wire_spelling!(Standing {
     Licensed => "licensed",
     Expired => "expired",
     Unlicensed => "unlicensed",
@@ -76,3 +68,11 @@ wire_spelling!(Outcome {
     Unknown => "unknown",
     Unavailable => "unavailable",
 });
+
+/// A format read off an answer, `version.formats[0]` say, can be handed to a
+/// download as it is, without a `clone()`.
+impl From<&DatabaseFormat> for DatabaseFormat {
+    fn from(format: &DatabaseFormat) -> Self {
+        format.clone()
+    }
+}

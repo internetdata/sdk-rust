@@ -66,7 +66,7 @@ impl<'a> DatabaseApi<'a> {
     pub async fn checksums(&self, id: &str, format: impl Into<Format>) -> Result<Checksums, Error> {
         let format = format.into();
         let response: ChecksumsResponse =
-            self.get(CHECKSUM, &[("id", id), ("format", format.as_str())]).await?;
+            self.get(CHECKSUM, &[("id", id), ("format", requested(&format)?)]).await?;
         Ok(*response.checksums)
     }
 
@@ -106,7 +106,7 @@ impl<'a> DatabaseApi<'a> {
         options: &DownloadOptions,
     ) -> Result<String, Error> {
         let format = format.into();
-        let mut query = vec![("id", id), ("format", format.as_str())];
+        let mut query = vec![("id", id), ("format", requested(&format)?)];
         if let Some(build) = options.build.as_deref().filter(|build| !build.is_empty()) {
             query.push(("build", build));
         }
@@ -233,6 +233,18 @@ impl<'a> DatabaseApi<'a> {
         let timeout = self.client.timeout();
         with_retry(self.client.retries(), || self.client.transport().get_json(path, query, timeout))
             .await
+    }
+}
+
+/// The wire spelling of a format a request names. `Other` is a format this
+/// release was not built with, which an answer may carry but a request may not
+/// name: it is refused before the network, where the API would answer a 400.
+fn requested(format: &Format) -> Result<&str, Error> {
+    match format {
+        Format::Other(value) => Err(Error::Config(format!(
+            "{value:?} is not a database format this release can request"
+        ))),
+        known => Ok(known.as_str()),
     }
 }
 

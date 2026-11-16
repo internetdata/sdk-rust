@@ -150,7 +150,9 @@ impl Catalog {
             .iter()
             .filter(|database| database.standing == Standing::Licensed)
             .flat_map(|database| &database.versions)
-            .flat_map(|version| version.formats.iter().map(|format| (version.id.as_str(), *format)))
+            .flat_map(|version| {
+                version.formats.iter().map(|format| (version.id.as_str(), format.clone()))
+            })
             .collect()
     }
 
@@ -235,6 +237,9 @@ pub fn assert_catalog_shape(catalog: &Catalog) {
                 );
                 assert!(family.starts.is_some(), "{base} is {} with no start", family.standing);
             }
+            // A standing this release was not built with states no presence
+            // rule, and is the API's to add.
+            _ => {}
         }
     }
 }

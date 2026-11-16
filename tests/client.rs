@@ -6,7 +6,7 @@ mod support;
 
 use std::time::{Duration, Instant};
 
-use internetdata::{Client, DatabaseFormat, Error, ErrorKind, Outcome, Standing};
+use internetdata::{Client, DatabaseFormat, Error, ErrorKind, LicenseType, Outcome, Standing};
 use support::{KEY, Route, Stub};
 
 const LIST: &str = "/api/v2/database/list";
@@ -36,7 +36,10 @@ async fn the_listing_unwraps_a_family_and_its_versions() {
     assert_eq!(family.base, "bogon_ip");
     assert_eq!(family.standing, Standing::Licensed);
     assert_eq!(
-        [(databases[0].open, databases[0].standing), (databases[1].open, databases[1].standing)],
+        [
+            (databases[0].open, databases[0].standing.clone()),
+            (databases[1].open, databases[1].standing.clone())
+        ],
         [(false, Standing::Licensed), (true, Standing::Unlicensed)],
         "an Open family's standing stays as served, never derived from open"
     );
@@ -114,6 +117,139 @@ async fn a_metadata_document_without_its_optional_fields_still_decodes() {
 
     assert_eq!(meta.update_freq, None);
     assert_eq!(meta.sample, None);
+}
+
+/// A closed vocabulary in an ANSWER is the API's to extend, so a value this
+/// release was not built with comes back as served, in `Other`, and the call
+/// answers. Refusing it failed every installed copy the day the API added one
+/// (2.12.0). A name spelled like a variant's or in another case is a value no
+/// list holds, so it comes back as served too.
+#[tokio::test]
+async fn a_value_this_release_was_not_built_with_comes_back_as_served() {
+    let stub = Stub::start([
+        (
+            LIST.to_owned(),
+            Route::ok(
+                r#"{"databases":[{"base":"bogon_ip","name":"Bogon IP","summary":"unroutable ranges","standing":"suspended","open":false,"license_type":"oem","starts":"2026-01-01T00:00:00Z","expires":null,"renews_at":null,"notice_due_at":null,"versions":[{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":["csvgz","parquet","Mmdb","MMDB"]}]}]}"#,
+            ),
+        ),
+        (
+            CHECKSUM.to_owned(),
+            Route::ok(
+                r#"{"id":"bogon_ip_v1","format":"parquet","checksums":{"md5":"m","sha1":"s1","sha256":"s256","sha512":"s512"}}"#,
+            ),
+        ),
+        (
+            DOWNLOADS.to_owned(),
+            Route::ok(
+                r#"{"downloads":[{"dataset_id":"bogon_ip_v1","format":"parquet","outcome":"throttled","sample":false,"open":false,"bytes":null,"http_status":429,"apikey_id":null,"client_ip":null,"user_agent":null,"created":"2026-09-04T10:00:00Z"}]}"#,
+            ),
+        ),
+    ])
+    .await;
+    let client = stub.client().retries(0).build().expect("build");
+    let database = client.database();
+
+    let family = database.list().await.expect("list").remove(0);
+    let sums = database.checksums("bogon_ip_v1", DatabaseFormat::Csvgz).await.expect("checksums");
+    let attempt = database.downloads(None).await.expect("downloads").remove(0);
+
+    assert_eq!(family.standing, Standing::Other("suspended".to_owned()));
+    assert_eq!(family.license_type, Some(LicenseType::Other("oem".to_owned())));
+    assert_eq!(
+        family.versions[0].formats,
+        [
+            DatabaseFormat::Csvgz,
+            DatabaseFormat::Other("parquet".to_owned()),
+            DatabaseFormat::Other("Mmdb".to_owned()),
+            DatabaseFormat::Other("MMDB".to_owned()),
+        ]
+    );
+    assert_eq!(sums.sha256, "s256");
+    assert_eq!(attempt.outcome, Outcome::Other("throttled".to_owned()));
+
+    // Both readers print the value as served, and serde sends it back as one.
+    assert_eq!(
+        [family.standing.as_str(), family.license_type.as_ref().expect("oem").as_str()],
+        ["suspended", "oem"]
+    );
+    assert_eq!(
+        [family.versions[0].formats[1].to_string(), attempt.outcome.to_string()],
+        ["parquet", "throttled"]
+    );
+    assert_eq!(serde_json::to_string(&family.standing).expect("serialize"), r#""suspended""#);
+}
+
+/// A value of the wrong TYPE is no value at all, so it still fails the call,
+/// as the API's own fault: a retried `ServerError` carrying the 200.
+#[tokio::test]
+async fn a_vocabulary_member_of_the_wrong_type_still_fails_the_call() {
+    let family = |standing: &str, license_type: &str, formats: &str| {
+        format!(
+            r#"{{"databases":[{{"base":"bogon_ip","name":"Bogon IP","summary":"s","standing":{standing},"open":false,"license_type":{license_type},"starts":null,"expires":null,"renews_at":null,"notice_due_at":null,"versions":[{{"id":"bogon_ip_v1","version":1,"summary":"v1","formats":{formats}}}]}}]}}"#
+        )
+    };
+    for (shape, body) in [
+        ("a numeric standing", family("1", "null", r#"["csvgz"]"#)),
+        ("a null standing", family("null", "null", r#"["csvgz"]"#)),
+        ("an object standing", family(r#"{"x":1}"#, "null", r#"["csvgz"]"#)),
+        ("a boolean license type", family(r#""licensed""#, "true", r#"["csvgz"]"#)),
+        ("a null format", family(r#""licensed""#, "null", "[null]")),
+        ("a numeric format", family(r#""licensed""#, "null", "[1]")),
+    ] {
+        let stub = Stub::start([(LIST.to_owned(), Route::ok(body))]).await;
+        let client = stub.client().retries(1).build().expect("build");
+
+        let err = client.database().list().await.expect_err(shape);
+
+        assert_eq!(err.kind(), ErrorKind::ServerError, "{shape}: {err}");
+        assert_eq!(err.status(), Some(200), "{shape}: {err}");
+        assert_eq!(stub.count(), 2, "{shape}: an unreadable answer was not retried");
+    }
+}
+
+/// `Other` lets a caller NAME a format no release was built with, which the
+/// API answers with a 400. It is refused before the network instead, as every
+/// other SDK refuses an unpublished format.
+#[tokio::test]
+async fn a_format_this_release_cannot_request_is_refused_before_the_network() {
+    let stub = Stub::start([]).await;
+    let client = stub.client().build().expect("build");
+    let database = client.database();
+    let zip = || DatabaseFormat::Other("zip".to_owned());
+    let scratch = std::env::temp_dir().join("internetdata-other-format.zip");
+
+    for (call, err) in [
+        ("checksums", database.checksums("bogon_ip_v1", zip()).await.map(drop)),
+        ("download_url", database.download_url("bogon_ip_v1", zip()).await.map(drop)),
+        ("download_bytes", database.download_bytes("bogon_ip_v1", zip()).await.map(drop)),
+        ("download", database.download("bogon_ip_v1", zip(), &scratch).await.map(drop)),
+    ]
+    .map(|(call, result)| (call, result.expect_err(call)))
+    {
+        assert!(matches!(err, Error::Config(_)), "{call}: {err}");
+        assert_eq!(err.kind(), ErrorKind::BadRequest, "{call}");
+        assert!(err.to_string().contains(r#""zip""#), "{call}: {err}");
+    }
+    assert_eq!(stub.count(), 0, "a format no release publishes reached the network");
+    assert!(!scratch.exists(), "a refused download left a file");
+}
+
+/// A format read off an answer is handed to a download by reference.
+#[tokio::test]
+async fn a_format_read_off_an_answer_is_taken_by_reference() {
+    let stub = Stub::start([(
+        DOWNLOAD.to_owned(),
+        Route::json(302, "").header("Location", "https://s3.example/bogon_ip_v1.mmdb"),
+    )])
+    .await;
+    let client = stub.client().build().expect("build");
+    let formats = [DatabaseFormat::Mmdb];
+
+    client.database().download_url("bogon_ip_v1", &formats[0]).await.expect("link");
+
+    let target = stub.target(DOWNLOAD).expect("the download endpoint was never asked");
+    assert!(target.contains("format=mmdb"), "{target}");
 }
 
 /// Refusals are listed alongside successes, and their nullable columns are

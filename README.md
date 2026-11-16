@@ -221,6 +221,8 @@ for database in client.database().list().await? {
 
 `standing` is `Licensed` for a live grant, `Expired` for one whose term has ended, and `Unlicensed` for a database published but never bought, so you can see what else exists without asking us. `license_type` says what your license lets you do with the data, and is `None` when there is no license.
 
+`Standing`, `LicenseType`, `DatabaseFormat` and a download's `Outcome` are `#[non_exhaustive]`: a value we add after your release comes back as `Other`, carrying it as we sent it, rather than failing the call, so give a `match` on one a `_` arm. `as_str()` and `{}` print the value as the API spells it.
+
 ### What is inside a database
 
 `metadata` carries the column schema, a few real rows, the row count and the size of each artifact, without downloading anything. Poll it to decide whether today's build is worth fetching, and read `size` to know what a transfer will cost before you start it:
@@ -352,7 +354,7 @@ Each redirect URI must be https on a public host name, or http on a loopback add
 `rustls` is the default, so the crate builds with no system libraries at all. If you would rather link the platform's TLS, or you already depend on `reqwest` with its own defaults and want one backend rather than two:
 
 ```toml
-internetdata = { version = "2", default-features = false, features = ["native-tls"] }
+internetdata = { version = "3", default-features = false, features = ["native-tls"] }
 ```
 
 ### Calling from synchronous code

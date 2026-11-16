@@ -77,7 +77,8 @@ impl Database {
     }
 }
 /// What your license permits you to do with the data. Null when there is no license, which is every family with standing `unlicensed`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum LicenseType {
     #[serde(rename = "evaluation")]
     Evaluation,
@@ -85,6 +86,9 @@ pub enum LicenseType {
     Standard,
     #[serde(rename = "redistribute")]
     Redistribute,
+    /// A value this release was not built with, as the API served it.
+    #[serde(untagged)]
+    Other(String),
 }
 
 impl Default for LicenseType {

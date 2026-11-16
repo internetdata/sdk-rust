@@ -617,6 +617,22 @@ async fn my_entitlement_reports_the_plan_and_the_usage() {
     assert_eq!(ent.apikey.expires, None);
 }
 
+/// `tier` is a vocabulary the API may extend, so a plan whose tier no release
+/// lists reads, the tier as served.
+#[tokio::test]
+async fn a_tier_this_release_was_not_built_with_reads() {
+    let body = ENTITLEMENT_BODY.replace(
+        r#""key": "max", "name": "Max", "tier": "max""#,
+        r#""key": "data", "name": "Data", "tier": "data""#,
+    );
+    let stub = Stub::start([("/api/v1/entitlement".to_owned(), Route::ok(body))]).await;
+    let client = stub.client().build().expect("build");
+
+    let ent = client.my_entitlement().await.expect("my_entitlement");
+
+    assert_eq!([ent.plan.key, ent.plan.name, ent.plan.tier], ["data", "Data", "data"]);
+}
+
 /// The whole point is what has been spent.
 #[tokio::test]
 async fn my_entitlement_is_not_cached() {

@@ -40,9 +40,9 @@ KEY_SECRET="INTERNETDATA_STAGING_KEY"
 # Mirrors the requirement in Cargo.toml, which is asserted against rather than
 # parsed: the range has to be evaluated before cargo is allowed to run at all,
 # and two lines kept in agreement beat a semver parser written in bash.
-REQUIREMENT='^2.9'
-RANGE_LOW='2.9.0'
-RANGE_HIGH='3.0.0'
+REQUIREMENT='^3.0'
+RANGE_LOW='3.0.0'
+RANGE_HIGH='4.0.0'
 
 function main() {
     local published

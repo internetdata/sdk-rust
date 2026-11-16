@@ -65,7 +65,9 @@ async fn live_catalog_and_download() {
         .iter()
         .filter(|database| database.standing == Standing::Licensed)
         .flat_map(|database| &database.versions)
-        .find_map(|version| version.formats.first().map(|format| (version.id.clone(), *format)))
+        .find_map(|version| {
+            version.formats.first().map(|format| (version.id.clone(), format.clone()))
+        })
         .expect("this key licenses nothing, so there is nothing to download");
 
     let meta = client.database().metadata(&id).await.expect("metadata");
@@ -73,10 +75,10 @@ async fn live_catalog_and_download() {
     println!("{id}.{format}: {size} bytes, built {}", meta.updated);
     assert!(size > 0 && size <= CEILING, "{id} is {size} bytes, past the {CEILING} ceiling");
 
-    let bytes = client.database().download_bytes(&id, format).await.expect("download_bytes");
+    let bytes = client.database().download_bytes(&id, &format).await.expect("download_bytes");
     assert_eq!(bytes.len() as i64, size, "the transfer and the published size disagree");
 
-    let sums = client.database().checksums(&id, format).await.expect("checksums");
+    let sums = client.database().checksums(&id, &format).await.expect("checksums");
     assert_eq!(sums.sha256.len(), 64, "sha256 {:?} did not unwrap past its key", sums.sha256);
 }
 
