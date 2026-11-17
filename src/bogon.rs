@@ -120,6 +120,8 @@ pub(crate) fn bogon_lookup(ip: &str) -> Lookup {
             hosted_domains: Some(Box::new(HostedDomains { total: 0, domains: Some(Vec::new()) })),
             // Only a free-plan key's answers carry it, and a bogon is answered here.
             trial_expired: None,
+            // Only a paid-plan key's answers carry it.
+            cap_reached: None,
         },
     }
 }

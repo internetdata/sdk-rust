@@ -193,7 +193,7 @@ match client.lookup("146.70.116.130").await {
 
 `kind()` is one of `BadRequest`, `Unauthorized`, `Forbidden`, `RateLimited`, `QuotaExceeded`, `ServerError`, `Network` or `Io`, the last of which is a database transfer that could not be written or that ended early. `message()` carries the API's own reason, such as `invalid API key` from a lookup or `NOT_LICENSED` from a database call.
 
-Note that `RateLimited` and `QuotaExceeded` both arrive as HTTP 429 and are not the same thing. A rate limit carries `Retry-After`, and retrying after it works; a spent quota needs your allowance raised or the window to roll over. The library retries rate limits for you, but not if your quota is exceeded.
+Note that `RateLimited` and `QuotaExceeded` both arrive as HTTP 429 and are not the same thing. A rate limit carries `Retry-After`, and retrying after it works; one without it is `QuotaExceeded`. The library retries rate limits for you, but never `QuotaExceeded`. The API itself always sends `Retry-After` with a 429, so that one comes from something in between, such as a proxy; a paid key past its overage cap gets `cap_reached` instead.
 
 ### Database downloads
 
@@ -369,12 +369,13 @@ let result = runtime.block_on(client.lookup("146.70.116.130"))?;
 
 ### Absent is not false
 
-Unlimited leaves out `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags, the detail behind every flag but Tor's and relay's, and the paid members of the shared objects, `location.city` and `asn.rpki_status` among them; a free-plan key's answer carries `trial_expired`, true once its daily trial is spent. Every member a plan can leave out is an `Option`, because your key decides which of them the API sends. `None` means "not in your plan", which is not the same answer as `Some(false)`, which means "checked, and no".
+Unlimited leaves out `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags, the detail behind every flag but Tor's and relay's, and the paid members of the shared objects, `location.city` and `asn.rpki_status` among them; a free-plan key's answer carries `trial_expired`, true once its daily trial is spent. A paid key's carries `cap_reached`, true once its organization's overage cap is reached, when the answer has Unlimited's fields and isn't billed. Every member a plan can leave out is an `Option`, because your key decides which of them the API sends. `None` means "not in your plan", which is not the same answer as `Some(false)`, which means "checked, and no".
 
 ```rust
 result.is_hosting.unwrap_or(false);   // when you only want the flag
 result.is_hosting.is_none();          // on Unlimited: not in your plan
 result.trial_expired == Some(true);   // a free-plan key's daily trial is spent
+result.cap_reached == Some(true);     // a paid key is past its overage cap
 ```
 
 ## Other Libraries
