@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.1.1 - 2026-11-18
+
+### Fixes
+
+- Re-pin the spec to 2026.11.17 as republished: KEY_OVER_HTTP on the account 403 ([`f31ef34`](https://github.com/internetdata/sdk-rust/commit/f31ef345775d3eb737c4488d214e5c8eabaf0fa3))
+
 ## 3.1.0 - 2026-11-17
 
 ### Features
