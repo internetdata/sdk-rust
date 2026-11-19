@@ -18,7 +18,7 @@ Requires Rust 1.85 or newer. Everything is `async` and runs on tokio.
 
 ## Usage
 
-**No API key needed to start.** Unlimited, the free plan, answers the Tor and relay flags, InternetData's own flags such as `is_anycast` and `is_web`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, limited per address per minute, with a key or without one.
+**No API key needed to start.** Unlimited, the free plan, answers the Tor and relay flags, InternetData's own flags such as `is_anycast` and `is_web`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, with no daily or monthly cap, with a key or without one.
 
 ```rust
 use internetdata::Client;
