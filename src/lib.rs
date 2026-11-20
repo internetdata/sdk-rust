@@ -61,10 +61,13 @@ mod oauth;
 mod objects;
 mod transport;
 
-// The OAuth unit tests reuse the integration suite's stub, which names this
-// crate from outside.
+// The unit tests reuse the integration suite's stub, loaded once for them all,
+// which names this crate from outside.
 #[cfg(test)]
 extern crate self as internetdata;
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod support;
 
 pub use bogon::is_bogon;
 pub use client::{BatchOptions, Client, ClientBuilder, DEFAULT_BASE_URL, LookupOptions};
