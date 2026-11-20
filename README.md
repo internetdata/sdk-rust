@@ -82,7 +82,7 @@ println!("{}", acct.usage.requests);      // 42
 println!("{}", acct.usage.window_end);    // when the allowance resets
 ```
 
-Usage counts against the anniversary of your subscription on a paid plan, not the calendar month and not the billing period, and against the UTC day on the free plan; it is the same number a lookup is gated on. `hard_limit` is `None` on an uncapped plan, which is not the same as zero.
+Usage counts against the anniversary of your subscription on a paid plan, not the calendar month and not the billing period, and against its trial on the free plan; it is the same number a lookup is gated on. `hard_limit` is `None` on an uncapped plan, which is not the same as zero.
 
 `my_ip_with` and `my_entitlement_with` take this call's own retry budget and timeout, the same as `lookup_with`.
 

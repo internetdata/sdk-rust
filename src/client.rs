@@ -72,7 +72,7 @@ struct Inner {
 
 impl Client {
     /// A client with no API key, against production. Without a key a lookup is
-    /// on Unlimited, the free plan, limited per address per minute. A batch
+    /// on Unlimited, the free plan, rate limited per address. A batch
     /// needs a paid plan, and [`Client::my_entitlement`] and every database
     /// published today need a key.
     pub fn new() -> Result<Self, Error> {
@@ -193,7 +193,7 @@ impl Client {
     ///
     /// Usage counts against the ALLOWANCE WINDOW - on a paid plan the
     /// anniversary of the subscription, not the calendar month and not the
-    /// billing period, and on the free plan the UTC day - and it is the same
+    /// billing period, and on the free plan its trial - and it is the same
     /// number a lookup is gated on. It can lag by a few seconds, because
     /// requests are counted in memory and flushed in aggregate.
     ///

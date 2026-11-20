@@ -45,7 +45,7 @@ pub type Warn = Arc<dyn Fn(&str) + Send + Sync>;
 ///
 /// Everything is optional, though a server almost certainly wants an
 /// [`Options::api_key`]: without one a lookup is on Unlimited, the free plan,
-/// and every lookup shares the per-minute limit of the server's one address.
+/// and every lookup shares the rate limit of the server's one address.
 #[derive(Clone)]
 pub struct Options {
     /// An existing client to use. Prefer this if you already hold one: two

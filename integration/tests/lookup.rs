@@ -103,7 +103,7 @@ async fn a_batch_without_a_key_is_refused_once_and_its_bogon_still_answered() {
     assert_eq!(sent, BTreeSet::from([PROBE, "8.8.8.8"]), "the batch sent the wrong addresses");
 }
 
-/// A free-plan key's answer is a paid plan's while the day's trial lasts and
+/// A free-plan key's answer is a paid plan's while its trial lasts and
 /// Unlimited's after, and says which; any other plan's carries no
 /// trial_expired at all.
 #[tokio::test]
