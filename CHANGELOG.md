@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.1.2 - 2026-11-20
+
+### Fixes
+
+- Cache a spent trial's or a reached cap's answer for a minute at most ([`5b88e01`](https://github.com/internetdata/sdk-rust/commit/5b88e01d2151d4f00e5cabc4928a97b4d9fa8e8f))
+- Re-pin the spec to 2026.11.20: reworded descriptions ([`7e68218`](https://github.com/internetdata/sdk-rust/commit/7e68218c131295a9610bc1ed1f7b0975f0463a29))
+
 ## 3.1.1 - 2026-11-18
 
 ### Fixes
