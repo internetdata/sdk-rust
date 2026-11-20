@@ -906,3 +906,104 @@ fn assert_timed_out(call: &str, err: &Error) {
     assert!(err.retryable(), "{call}: a timeout is worth another attempt");
     assert!(err.message().contains("timed out"), "{call}: {}", err.message());
 }
+
+/// A paid domain answer's network on each address, co-hosted domains, home
+/// page, redirects and backlinks are read as served, and each is `None` on
+/// Unlimited rather than an empty value.
+#[tokio::test]
+async fn a_paid_domain_answers_hosting_page_and_links_are_read() {
+    let corpus = support::corpus::load();
+    let body = |name: &str| {
+        let case = corpus.lookup.iter().find(|c| c.name == name).expect(name);
+        case.body.to_string()
+    };
+    let stub = Stub::start([]).await;
+    stub.sequence(
+        "/domain/example.com",
+        [Route::ok(body("domain-paid-answer")), Route::ok(body("domain-unlimited-answer"))],
+    );
+    let client = stub.client().no_cache().build().expect("build");
+
+    let paid = client.lookup_domain("example.com").await.expect("paid");
+    let hosting = paid.hosting.expect("hosting");
+    assert_eq!(hosting.len(), 2);
+    assert_eq!(hosting[1].ip, "2001:db8::10");
+    assert_eq!(hosting[1].asn.prefix, "2001:db8::/32");
+    assert_eq!(hosting[0].asn.asn, 64496);
+    let cohosted = paid.cohosted_domains.expect("cohosted_domains");
+    assert_eq!(
+        (cohosted.ip.as_str(), cohosted.total, cohosted.domains.len()),
+        ("192.0.2.10", 3, 3)
+    );
+    let web = paid.web.expect("web");
+    assert_eq!(web.url, "https://example.com/");
+    assert_eq!(web.title, "Example Domain");
+    assert_eq!(web.last_seen, "2026-11-18");
+    assert_eq!(web.links.total, 1);
+    assert_eq!(web.links.hosts, ["www.iana.org"]);
+    let redirects = paid.redirects.expect("redirects");
+    assert_eq!((redirects.total, redirects.domains.len()), (2, 2));
+    let backlinks = paid.backlinks.expect("backlinks");
+    assert_eq!(backlinks.total, 3);
+    assert_eq!(backlinks.domains[2], "wiki.example");
+
+    let free = client.lookup_domain("example.com").await.expect("unlimited");
+    assert!(free.hosting.is_none(), "hosting");
+    assert!(free.cohosted_domains.is_none(), "cohosted_domains");
+    assert!(free.web.is_none(), "web");
+    assert!(free.redirects.is_none(), "redirects");
+    assert!(free.backlinks.is_none(), "backlinks");
+}
+
+/// One of the five paid domain members served short of a member it requires,
+/// or holding the wrong type, is the answer unreadable, retried like an
+/// outage, never an answer with a zero standing in.
+#[tokio::test]
+async fn a_paid_domain_member_it_cannot_read_is_a_retried_server_error() {
+    let corpus = support::corpus::load();
+    let paid = corpus.lookup.iter().find(|c| c.name == "domain-paid-answer").expect("case");
+    let broken: [(&str, &str, serde_json::Value); 7] = [
+        ("a hosting entry short of its asn", "hosting", serde_json::json!([{"ip": "192.0.2.10"}])),
+        (
+            "a hosting entry's asn short of a key",
+            "hosting",
+            serde_json::json!([{"ip": "192.0.2.10", "asn": {"asn": 64496}}]),
+        ),
+        (
+            "cohosted_domains total a string",
+            "cohosted_domains",
+            serde_json::json!({"ip": "192.0.2.10", "total": "3", "domains": []}),
+        ),
+        (
+            "web short of its links",
+            "web",
+            serde_json::json!({"url": "https://example.com/", "title": "", "description": "", "last_seen": ""}),
+        ),
+        (
+            "web links total a fraction",
+            "web",
+            serde_json::json!({"url": "", "title": "", "description": "", "last_seen": "",
+                "links": {"total": 1.5, "hosts": []}}),
+        ),
+        ("redirects short of domains", "redirects", serde_json::json!({"total": 2})),
+        (
+            "backlinks holding a number",
+            "backlinks",
+            serde_json::json!({"total": 1, "domains": [7]}),
+        ),
+    ];
+    for (name, member, value) in broken {
+        let mut body = paid.body.clone();
+        body[member] = value;
+        let stub = Stub::start([]).await;
+        stub.sequence(
+            "/domain/example.com",
+            [Route::ok(body.to_string()), Route::ok(body.to_string())],
+        );
+        let client = stub.client().no_cache().retries(1).build().expect("build");
+        let err = client.lookup_domain("example.com").await.expect_err(name);
+        assert_eq!(err.kind(), ErrorKind::ServerError, "{name}: {err}");
+        assert_eq!(err.status(), Some(200), "{name}: the status");
+        assert_eq!(stub.count(), 2, "{name}: retried like an outage");
+    }
+}

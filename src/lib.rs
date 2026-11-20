@@ -97,8 +97,9 @@ pub use models::{
     Checksums, ChecksumsResponse, Database, DatabaseMetadata, DatabaseMetadataColumn,
     DatabaseVersion, Download,
 };
-pub use models::{DatabaseFormat, Standing};
 pub use models::{
-    DisposableDetail, DnsAddressRecord, DnsCnameRecord, DnsMxRecord, DnsNsRecord, DomainDns,
-    DomainIpRange, DomainIpRanges, DomainLookupResponse,
+    CohostedDomains, DisposableDetail, DnsAddressRecord, DnsCnameRecord, DnsMxRecord, DnsNsRecord,
+    DomainBacklinks, DomainDns, DomainHost, DomainIpRange, DomainIpRanges, DomainLookupResponse,
+    DomainRedirects, DomainWeb, DomainWebLinks,
 };
+pub use models::{DatabaseFormat, Standing};

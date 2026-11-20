@@ -67,6 +67,7 @@ SELECTED="${SELECTED}:DnsAddressRecord:DnsMxRecord:DnsNsRecord:DnsCnameRecord"
 SELECTED="${SELECTED}:DomainIpRanges:DomainIpRange:ClassDetail:ProxyDetail:PubproxyDetail"
 SELECTED="${SELECTED}:CarrierDetail:SatelliteDetail:SshDetail:SmtpDetail:DnsResolverDetail"
 SELECTED="${SELECTED}:BitTorrentDetail:DisposableDetail"
+SELECTED="${SELECTED}:DomainHost:CohostedDomains:DomainWeb:DomainWebLinks:DomainRedirects:DomainBacklinks"
 
 rm -rf .gen
 mkdir -p .gen

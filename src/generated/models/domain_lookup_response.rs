@@ -40,11 +40,22 @@ pub struct DomainLookupResponse {
     pub has_cname: bool,
     #[serde(rename = "dns", skip_serializing_if = "Option::is_none")]
     pub dns: Option<Box<models::DomainDns>>,
+    /// The network announcing each address in `dns.a` and then `dns.aaaa`, from IP ASN; `[]` where it resolves to none. Paid plans and the trial.
+    #[serde(rename = "hosting", skip_serializing_if = "Option::is_none")]
+    pub hosting: Option<Vec<models::DomainHost>>,
+    #[serde(rename = "cohosted_domains", skip_serializing_if = "Option::is_none")]
+    pub cohosted_domains: Option<Box<models::CohostedDomains>>,
     #[serde(rename = "ip_ranges", skip_serializing_if = "Option::is_none")]
     pub ip_ranges: Option<Box<models::DomainIpRanges>>,
     /// `{}` when `is_disposable` is false. Paid plans and the trial.
     #[serde(rename = "disposable", skip_serializing_if = "Option::is_none")]
     pub disposable: Option<Box<models::DisposableDetail>>,
+    #[serde(rename = "web", skip_serializing_if = "Option::is_none")]
+    pub web: Option<Box<models::DomainWeb>>,
+    #[serde(rename = "redirects", skip_serializing_if = "Option::is_none")]
+    pub redirects: Option<Box<models::DomainRedirects>>,
+    #[serde(rename = "backlinks", skip_serializing_if = "Option::is_none")]
+    pub backlinks: Option<Box<models::DomainBacklinks>>,
     /// On every answer to a key on the free plan, and on no other: `false` while its organization's trial of every field lasts, `true` once the answer has Unlimited's fields.
     #[serde(rename = "trial_expired", skip_serializing_if = "Option::is_none")]
     pub trial_expired: Option<bool>,
@@ -74,8 +85,13 @@ impl DomainLookupResponse {
             has_ns,
             has_cname,
             dns: None,
+            hosting: None,
+            cohosted_domains: None,
             ip_ranges: None,
             disposable: None,
+            web: None,
+            redirects: None,
+            backlinks: None,
             trial_expired: None,
             cap_reached: None,
         }
