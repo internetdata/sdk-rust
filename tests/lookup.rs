@@ -287,6 +287,44 @@ async fn or_false_readers_coalesce_an_absent_flag() {
     assert_eq!(result.is_dcproxy, None, "the reader must not populate what it reads");
 }
 
+/// `is_bot` is on every answer, and a paid answer's `bot` says whose bot it is:
+/// both read off the result, and an answer without `is_bot` is no answer.
+#[tokio::test]
+async fn a_bots_answer_says_so_and_whose_bot_it_is() {
+    let mut body = answer_value("66.249.66.1");
+    body["is_bot"] = serde_json::json!(true);
+    body["bot"] = serde_json::json!({
+        "provider": "google",
+        "provider_name": "Google",
+        "agents": ["Googlebot"],
+        "categories": ["search_engine"],
+        "verified": true,
+        "identity": "verified",
+        "verified_by": "list",
+        "confidence": "high",
+        "first_seen": "2026-11-21",
+        "last_seen": "2026-11-21",
+    });
+    let mut unflagged = answer_value("45.83.91.1");
+    unflagged.as_object_mut().expect("an object").remove("is_bot");
+    let stub = Stub::start([
+        ("/66.249.66.1".to_owned(), Route::ok(body.to_string())),
+        ("/45.83.91.1".to_owned(), Route::ok(unflagged.to_string())),
+    ])
+    .await;
+    let client = stub.client().retries(0).build().expect("build");
+
+    let result = client.lookup("66.249.66.1").await.expect("lookup");
+    assert!(result.is_bot, "is_bot reads straight off the result");
+    let bot = result.bot.as_deref().expect("a paid answer's bot");
+    assert_eq!(bot.provider_name.as_deref(), Some("Google"));
+    assert_eq!(bot.agents.as_deref(), Some(&["Googlebot".to_owned()][..]));
+    assert_eq!(bot.verified, Some(true));
+
+    let err = client.lookup("45.83.91.1").await.expect_err("an answer without is_bot");
+    assert_eq!(err.kind(), ErrorKind::ServerError, "{err}");
+}
+
 /// A 2xx a call cannot read is no answer: the server_error an outage is,
 /// carrying the status, and retried like one.
 #[tokio::test]

@@ -212,6 +212,29 @@ async fn a_condition_reaches_the_evidence_fields() {
     );
 }
 
+/// `is_bot` is answered on every plan, so a condition on it blocks a bot's
+/// address and lets any other through.
+#[tokio::test]
+async fn a_condition_on_is_bot_blocks_a_bots_address() {
+    const BOT_IP: &str = "66.249.66.1";
+    let stub = Stub::start([
+        answer(BOT_IP, json!({ "is_bot": true })),
+        answer(PUBLIC_IP, json!({ "is_bot": false })),
+    ])
+    .await;
+    let core =
+        serving(&stub, Options::new().block_condition(vec![Condition::from([("is_bot", true)])]))
+            .await;
+    assert!(
+        Req::from(BOT_IP).evaluate(&core).await.expect("evaluate").blocked,
+        "a bot's address must be blocked"
+    );
+    assert!(
+        !Req::from(PUBLIC_IP).evaluate(&core).await.expect("evaluate").blocked,
+        "an address no bot uses must pass"
+    );
+}
+
 #[tokio::test]
 async fn a_bound_reaches_the_numeric_evidence() {
     let stub =

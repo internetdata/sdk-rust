@@ -65,6 +65,7 @@ pub(crate) fn bogon_lookup(ip: &str) -> Lookup {
             is_pubproxy: Some(false),
             is_hosting: Some(false),
             is_cdn: Some(false),
+            is_bot: false,
             is_anycast: false,
             is_carrier: false,
             is_satellite: false,
@@ -82,6 +83,7 @@ pub(crate) fn bogon_lookup(ip: &str) -> Lookup {
             pubproxy: Some(Box::default()),
             hosting: Some(Box::default()),
             cdn: Some(Box::default()),
+            bot: Some(Box::default()),
             carrier: Some(Box::default()),
             satellite: Some(Box::default()),
             ssh: Some(Box::default()),
@@ -118,6 +120,8 @@ pub(crate) fn bogon_lookup(ip: &str) -> Lookup {
             whois: Some(Box::default()),
             rwhois: Some(Box::default()),
             hosted_domains: Some(Box::new(HostedDomains { total: 0, domains: Some(Vec::new()) })),
+            // Only an answer to a lookup that sent a user agent carries it.
+            user_agent: None,
             // Only a free-plan key's answers carry it, and a bogon is answered here.
             trial_expired: None,
             // Only a paid-plan key's answers carry it.

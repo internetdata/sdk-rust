@@ -68,12 +68,28 @@ SELECTED="${SELECTED}:DomainIpRanges:DomainIpRange:ClassDetail:ProxyDetail:Pubpr
 SELECTED="${SELECTED}:CarrierDetail:SatelliteDetail:SshDetail:SmtpDetail:DnsResolverDetail"
 SELECTED="${SELECTED}:BitTorrentDetail:DisposableDetail"
 SELECTED="${SELECTED}:DomainHost:CohostedDomains:DomainWeb:DomainWebLinks:DomainRedirects:DomainBacklinks"
+SELECTED="${SELECTED}:BotDetail:UserAgentVerdict"
 
 rm -rf .gen
-mkdir -p .gen
+mkdir -p .gen/spec
+
+# The generator reads a copy of the pinned spec with two of its changes held
+# back until a major, so a minor changes no public type: every `asn` stays the
+# i32 it has been, not the i64 that `format: int64` asks for, and the AS's
+# `country` and `rpki_status` stay Option<String>, as they were while the spec
+# left them optional. The API serves both members on every answer, and no AS it
+# serves is past i32. The pin itself stays the published document. Either edit
+# finding nothing to change stops the script, rather than reaching the release
+# unnoticed.
+perl -0777 -pe '
+    $n = s/(\n {8}asn:\n {10}type: integer\n) {10}format: int64\n/$1/g;
+    die "no int64 asn member to hold back\n" unless $n;
+    s{(\n    Asn:\n.*?\n      required:\n(?: {8}- \w+\n)*?) {8}- country\n {8}- rpki_status\n}{$1}s
+        or die "the AS no longer requires country and rpki_status\n";
+' spec/openapi.yaml >.gen/spec/openapi.yaml
 
 docker run --rm \
-    -v "$PWD/spec:/spec:ro" \
+    -v "$PWD/.gen/spec:/spec:ro" \
     -v "$PWD/.gen:/out" \
     "$GENERATOR_IMAGE" generate \
     -i /spec/openapi.yaml \
@@ -92,6 +108,20 @@ mkdir -p src/generated
 cp -R .gen/src/models src/generated/models
 
 rm -rf .gen
+
+# A member the spec makes required becomes a parameter of the generated
+# `new()`, so a minor that adds one would break every call to it. `is_bot`
+# (spec 2026.11.21) is read as required, so an answer without it still fails
+# the call, while `LookupResponse::new` keeps the arguments it had and starts
+# it at false. A member named here that the generator stops passing to `new()`
+# stops the script.
+for member in is_bot; do
+    MEMBER="$member" perl -0777 -pi -e '
+        my $m = $ENV{MEMBER};
+        s/(pub fn new\([^)]*?)\s*\b$m: bool,([^)]*\) -> LookupResponse \{\s*LookupResponse \{[^}]*?)\b$m,/$1$2$m: false,/s
+            or die "LookupResponse::new no longer takes $m: teach this script its shape\n";
+    ' src/generated/models/lookup_response.rs
+done
 
 # Every date member reads through src/dates.rs, which takes only the form the
 # spec's `format` names: chrono's own serde reader is a relaxed one, and took

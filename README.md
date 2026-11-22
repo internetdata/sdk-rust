@@ -18,7 +18,7 @@ Requires Rust 1.85 or newer. Everything is `async` and runs on tokio.
 
 ## Usage
 
-**No API key needed to start.** Unlimited, the free plan, answers the Tor and relay flags, InternetData's own flags such as `is_anycast` and `is_web`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, with no daily or monthly cap, with a key or without one.
+**No API key needed to start.** Unlimited, the free plan, answers the Tor, relay and bot flags, InternetData's own flags such as `is_anycast` and `is_web`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, with no daily or monthly cap, with a key or without one.
 
 ```rust
 use internetdata::Client;
@@ -29,6 +29,7 @@ let result = client.lookup("146.70.116.130").await?;
 println!("{}", result.location.country);    // AT
 println!("{}", result.asn.name);            // M247 Europe SRL
 println!("{}", result.is_tor);              // false
+println!("{}", result.is_bot);              // false: not a crawler's or another bot's address
 ```
 
 ### With an API key
@@ -46,6 +47,9 @@ println!("{:?}", result.location.city);     // Some("Vienna"), on a paid plan
 
 if let Some(vpn) = result.vpn.as_deref() {
     println!("{:?}", vpn.provider);         // Some("mullvad"), on a paid plan
+}
+if let Some(bot) = result.bot.as_deref() {
+    println!("{:?}", bot.agents);           // Some(["Googlebot"]) for a crawler's address, on a paid plan
 }
 ```
 

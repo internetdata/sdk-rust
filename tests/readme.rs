@@ -19,6 +19,7 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", result.location.country);
     println!("{}", result.asn.name);
     println!("{}", result.is_tor);
+    println!("{}", result.is_bot);
 
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
 
@@ -28,6 +29,9 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(vpn) = result.vpn.as_deref() {
         println!("{:?}", vpn.provider);
+    }
+    if let Some(bot) = result.bot.as_deref() {
+        println!("{:?}", bot.agents);
     }
 
     let key = std::env::var("INTERNETDATA_API_KEY")?;

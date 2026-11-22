@@ -87,10 +87,11 @@ use generated::models;
 // names the module path.
 pub use models::database::LicenseType;
 pub use models::download::Outcome;
+pub use models::user_agent_verdict::Verdict;
 pub use models::{
-    AbuseContact, Asn, BitTorrentDetail, CarrierDetail, ClassDetail, Company, DnsResolverDetail,
-    HostedDomains, Location, LookupResponse, ProxyDetail, PubproxyDetail, Rwhois, SatelliteDetail,
-    SmtpDetail, SshDetail, WebDetail, Whois,
+    AbuseContact, Asn, BitTorrentDetail, BotDetail, CarrierDetail, ClassDetail, Company,
+    DnsResolverDetail, HostedDomains, Location, LookupResponse, ProxyDetail, PubproxyDetail,
+    Rwhois, SatelliteDetail, SmtpDetail, SshDetail, UserAgentVerdict, WebDetail, Whois,
 };
 pub use models::{AsnHostedDomains, AsnLookupResponse, AsnPrefix};
 pub use models::{
