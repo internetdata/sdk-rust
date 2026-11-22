@@ -1,6 +1,6 @@
 [package]
 name = "internetdata"
-version = "3.2.0"
+version = "3.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "The official Rust client library for the InternetData API: look up IP addresses, AS numbers and domains, and download the IP intelligence databases."

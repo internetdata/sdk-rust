@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.3.0 - 2026-11-22
+
+### Features
+
+- Read whether a bot uses an address, and whose: is_bot and bot ([`ad4c4ba`](https://github.com/internetdata/sdk-rust/commit/ad4c4ba73c76db5beccfacb6206fd1f02c166dda))
+
 ## 3.2.0 - 2026-11-20
 
 ### Features
