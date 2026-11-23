@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.3.1 - 2026-11-23
+
+### Fixes
+
+- Comments: whose bot an unverified address claims, on spec 2026.11.22 ([`ae7b7d8`](https://github.com/internetdata/sdk-rust/commit/ae7b7d8adbdd21cab22ffec515f12efe97858291))
+
 ## 3.3.0 - 2026-11-22
 
 ### Features
