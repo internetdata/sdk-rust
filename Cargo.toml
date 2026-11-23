@@ -15,10 +15,12 @@ categories = ["api-bindings", "network-programming"]
 exclude = ["/spec", "/scripts", "/.github", "/integration"]
 
 [dependencies]
-# chrono and tokio are floored past the advisories their older releases carry:
-# cargo checks none, so a lock already holding one would keep it.
+# chrono, futures-util and tokio are floored past the advisories their older
+# releases carry: cargo checks none, so a lock already holding one would keep it.
 chrono = { version = "0.4.20", features = ["serde"] }
-futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# 0.3.2 is past RUSTSEC-2020-0062; 0.3.31 is the lowest a lockfile resolves,
+# since js-sys, through reqwest and chrono, needs it.
+futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
 # The PKCE verifier's 32 bytes, from the system's secure random source.
 getrandom = "0.4"
 indexmap = "2"
