@@ -1045,3 +1045,112 @@ async fn a_paid_domain_member_it_cannot_read_is_a_retried_server_error() {
         assert_eq!(stub.count(), 2, "{name}: retried like an outage");
     }
 }
+
+/// Every seen day an answer carries is a full-date on a day that exists, and
+/// comes back as served, a `String`. Anything else is the answer unreadable,
+/// retried like an outage. The three members the spec leaves plain strings,
+/// because each can be empty, still read `""`.
+#[tokio::test]
+async fn a_seen_day_that_is_no_full_date_is_a_retried_server_error() {
+    const DAY: &str = "2026-11-08";
+    let corpus = support::corpus::load();
+    let web_row =
+        corpus.lookup.iter().find(|c| c.name == "paid-services").expect("case").body["web"][0]
+            .clone();
+    let both = serde_json::json!({"first_seen": DAY, "last_seen": DAY});
+    let mut address = answer_value("146.70.116.130");
+    for member in ["vpn", "tor", "relay", "hosting", "cdn"] {
+        address[member] = serde_json::json!({"last_seen": DAY});
+    }
+    for member in ["resproxy", "dcproxy", "mobproxy", "bot", "ssh", "smtp", "dns_resolver"] {
+        address[member] = both.clone();
+    }
+    address["pubproxy"] = serde_json::json!({"last_seen": DAY, "last_usable": ""});
+    address["bittorrent"] =
+        serde_json::json!({"first_seen": DAY, "last_seen": DAY, "last_reachable": ""});
+    address["web"] = serde_json::json!([web_row]);
+    let mut asn =
+        corpus.lookup.iter().find(|c| c.name == "asn-paid-answer").expect("case").body.clone();
+    asn["prefixes"][0]["first_seen"] = DAY.into();
+    let mut domain =
+        corpus.lookup.iter().find(|c| c.name == "domain-paid-answer").expect("case").body.clone();
+    domain["dns"]["cname"] = serde_json::json!([{"target": "www.example.net", "last_seen": DAY}]);
+    domain["disposable"] = both.clone();
+    domain["web"]["last_seen"] = "".into();
+
+    // Served whole, every seen day reads, and comes back as it was served.
+    let stub = Stub::start([
+        ("/146.70.116.130".to_owned(), Route::ok(address.to_string())),
+        ("/asn/9009".to_owned(), Route::ok(asn.to_string())),
+        ("/domain/example.com".to_owned(), Route::ok(domain.to_string())),
+    ])
+    .await;
+    let client = stub.client().no_cache().retries(0).build().expect("build");
+    let read = client.lookup("146.70.116.130").await.expect("the address");
+    assert_eq!(read.bot.as_ref().and_then(|b| b.first_seen.as_deref()), Some(DAY));
+    assert_eq!(read.web.as_ref().map(|rows| rows[0].last_seen.as_str()), Some("2026-10-31"));
+    assert_eq!(read.bittorrent.as_ref().and_then(|b| b.last_reachable.as_deref()), Some(""));
+    let read = client.lookup_asn(9009).await.expect("the AS");
+    assert_eq!(read.prefixes.as_ref().map(|p| p[0].first_seen.as_str()), Some(DAY));
+    let read = client.lookup_domain("example.com").await.expect("the domain");
+    assert_eq!(read.dns.as_ref().map(|d| d.cname[0].last_seen.as_str()), Some(DAY));
+
+    // Every seen day in each answer, by its path.
+    fn seen_days(value: &serde_json::Value, path: String, out: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(members) => {
+                for (name, member) in members {
+                    let at = format!("{path}/{name}");
+                    if (name == "first_seen" || name == "last_seen") && member.is_string() {
+                        out.push(at);
+                    } else {
+                        seen_days(member, at, out);
+                    }
+                }
+            }
+            serde_json::Value::Array(rows) => {
+                for (i, row) in rows.iter().enumerate() {
+                    seen_days(row, format!("{path}/{i}"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut cases = Vec::new();
+    for (route, body) in
+        [("/146.70.116.130", &address), ("/asn/9009", &asn), ("/domain/example.com", &domain)]
+    {
+        let mut paths = Vec::new();
+        seen_days(body, String::new(), &mut paths);
+        // DomainWeb's day is empty where no page was read, and stays a plain string.
+        paths.retain(|p| !(route.starts_with("/domain/") && p == "/web/last_seen"));
+        for path in paths {
+            for bad in ["", "x", "2026-02-30", "2026-11-8", " 2026-11-08", "2026-11-08T00:00:00Z"] {
+                let mut served = body.clone();
+                *served.pointer_mut(&path).expect("path") = bad.into();
+                cases.push((route, path.clone(), bad, served.to_string()));
+            }
+        }
+    }
+    assert!(cases.len() >= 6 * 30, "every seen day is covered: {} cases", cases.len());
+    let mut checks = tokio::task::JoinSet::new();
+    for (route, path, bad, served) in cases {
+        checks.spawn(async move {
+            let stub = Stub::start([]).await;
+            stub.sequence(route, [Route::ok(served.clone()), Route::ok(served)]);
+            let client = stub.client().no_cache().retries(1).build().expect("build");
+            let outcome = match route {
+                "/asn/9009" => client.lookup_asn(9009).await.map(drop),
+                "/domain/example.com" => client.lookup_domain("example.com").await.map(drop),
+                _ => client.lookup("146.70.116.130").await.map(drop),
+            };
+            let Err(err) = outcome else { panic!("{route}{path} = {bad:?}: read as a day") };
+            assert_eq!(err.kind(), ErrorKind::ServerError, "{route}{path} = {bad:?}: {err}");
+            assert_eq!(err.status(), Some(200), "{route}{path} = {bad:?}: the status");
+            assert_eq!(stub.count(), 2, "{route}{path} = {bad:?}: retried like an outage");
+        });
+    }
+    while let Some(check) = checks.join_next().await {
+        check.expect("case");
+    }
+}

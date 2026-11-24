@@ -81,11 +81,29 @@ mkdir -p .gen/spec
 # serves is past i32. The pin itself stays the published document. Either edit
 # finding nothing to change stops the script, rather than reaching the release
 # unnoticed.
+#
+# The seen days below (spec 2026.11.23) stay the String they have been rather
+# than the chrono::NaiveDate their `format: date` asks for; each still reads
+# through src/dates.rs, which refuses a value that is not a full-date (below).
+SEEN_DAYS="AsnPrefix.first_seen BitTorrentDetail.first_seen BitTorrentDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} BotDetail.first_seen BotDetail.last_seen ClassDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} DisposableDetail.first_seen DisposableDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} DnsAddressRecord.last_seen DnsCnameRecord.last_seen DnsMxRecord.last_seen"
+SEEN_DAYS="${SEEN_DAYS} DnsNsRecord.last_seen DnsResolverDetail.first_seen DnsResolverDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} ProxyDetail.first_seen ProxyDetail.last_seen PubproxyDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} SmtpDetail.first_seen SmtpDetail.last_seen SshDetail.first_seen SshDetail.last_seen"
+SEEN_DAYS="${SEEN_DAYS} WebDetail.first_seen WebDetail.last_seen"
+export SEEN_DAYS
 perl -0777 -pe '
     $n = s/(\n {8}asn:\n {10}type: integer\n) {10}format: int64\n/$1/g;
     die "no int64 asn member to hold back\n" unless $n;
     s{(\n    Asn:\n.*?\n      required:\n(?: {8}- \w+\n)*?) {8}- country\n {8}- rpki_status\n}{$1}s
         or die "the AS no longer requires country and rpki_status\n";
+    for my $day (split " ", $ENV{SEEN_DAYS}) {
+        my ($schema, $member) = split /\./, $day;
+        s{(\n    \Q$schema\E:\n(?: {6}.*\n|\n)*? {8}\Q$member\E:\n {10}type: string\n) {10}format: date\n}{$1}
+            or die "$day is no longer a format: date member to hold back\n";
+    }
 ' spec/openapi.yaml >.gen/spec/openapi.yaml
 
 docker run --rm \
@@ -137,6 +155,20 @@ if grep -h -B1 -E '^\s*pub \w+: .*chrono::' src/generated/models/*.rs | grep -E 
     echo "a date member above reads through chrono's relaxed parser: teach this script its shape" >&2
     exit 1
 fi
+
+# The seen days held back above are Strings, read through src/dates.rs's
+# `day` and `option_day`, which hand back the value as served once it is a
+# full-date. One in a shape these two do not rewrite stops the script.
+for day in $SEEN_DAYS; do
+    schema=${day%.*}
+    file="src/generated/models/$(perl -pe 's/(?<!^)([A-Z])/_$1/g; $_ = lc' <<<"$schema").rs"
+    MEMBER="${day#*.}" DAY="$day" perl -0777 -pi -e '
+        my $m = $ENV{MEMBER};
+        s/(#\[serde\(rename = "$m")(, skip_serializing_if = "Option::is_none"\)\]\s+pub $m: Option<String>,)/$1, default, deserialize_with = "crate::dates::option_day"$2/
+            or s/(#\[serde\(rename = "$m")(\)\]\s+pub $m: String,)/$1, deserialize_with = "crate::dates::day"$2/
+            or die "$ENV{DAY} is in a shape this script does not rewrite\n";
+    ' "$file"
+done
 
 # A `type: object` with no properties is generated as serde_json::Value, which
 # takes any JSON at all, so a `sample` row of `1` or `null` came back as the

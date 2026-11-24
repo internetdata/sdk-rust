@@ -19,6 +19,29 @@ pub(crate) fn date<'de, D: Deserializer<'de>>(deserializer: D) -> Result<NaiveDa
     parse_date(&value).ok_or_else(|| D::Error::custom(format!("{value:?} is not a date")))
 }
 
+/// A required `format: date` member kept a `String` until a major (the seen
+/// days, spec 2026.11.23): the value as served, once it is a full-date.
+pub(crate) fn day<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let value = String::deserialize(deserializer)?;
+    match parse_date(&value) {
+        Some(_) => Ok(value),
+        None => Err(D::Error::custom(format!("{value:?} is not a date"))),
+    }
+}
+
+/// An optional `format: date` member kept an `Option<String>`: absent and null
+/// are `None`, as they were, and anything else must be a full-date.
+pub(crate) fn option_day<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Option::<String>::deserialize(deserializer)?
+        .map(|value| match parse_date(&value) {
+            Some(_) => Ok(value),
+            None => Err(D::Error::custom(format!("{value:?} is not a date"))),
+        })
+        .transpose()
+}
+
 /// A required `format: date-time` member.
 pub(crate) fn date_time<'de, D: Deserializer<'de>>(
     deserializer: D,
