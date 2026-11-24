@@ -2,6 +2,16 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.4.0 - 2026-11-24
+
+### Features
+
+- Match a condition on a list member when any element matches ([`8bc44fc`](https://github.com/internetdata/sdk-rust/commit/8bc44fcba7a57c561901cdd7382c0e94fc76ce63))
+
+### Fixes
+
+- Refuse a seen day that is no full-date, on spec 2026.11.23 ([`e9a3eb0`](https://github.com/internetdata/sdk-rust/commit/e9a3eb016c0ec75545aa0ac4fc95cd35fbacce3b))
+
 ## 3.3.2 - 2026-11-23
 
 ### Fixes
