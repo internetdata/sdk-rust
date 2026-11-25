@@ -34,6 +34,21 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
         println!("{:?}", bot.agents);
     }
 
+    let user_agent = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+    let result = client
+        .lookup_with("66.249.66.1", internetdata::LookupOptions::new().user_agent(user_agent))
+        .await?;
+    if let Some(ua) = result.user_agent.as_deref() {
+        println!("{} {}", ua.agent, ua.verdict);
+        let real_crawler = ua.verdict == internetdata::Verdict::Verified;
+    }
+    let results = client
+        .lookup_batch(
+            ["66.249.66.1", "8.8.8.8"],
+            BatchOptions::new().user_agents([("66.249.66.1", user_agent)]),
+        )
+        .await;
+
     let key = std::env::var("INTERNETDATA_API_KEY")?;
     let client = Client::builder().api_key(key.clone()).concurrency(32).retries(4).build()?;
     let client = Client::builder().api_key(key).timeout(Duration::from_secs(5)).build()?;
