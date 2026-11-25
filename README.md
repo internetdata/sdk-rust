@@ -34,7 +34,7 @@ println!("{}", result.is_bot);              // false: not a crawler's or another
 
 ### With an API key
 
-Every paid plan answers every field: `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags as well, the detail behind each flag, the city-level location, `whois` and `rwhois`. A free account tries every field. Create a key in the console, then pass it in:
+A paid plan answers every field: `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags as well, the detail behind each flag, the city-level location, `whois` and `rwhois`. A free account tries every field. Create a key in the console, then pass it in:
 
 ```rust
 let client = Client::builder()
