@@ -2,6 +2,17 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.5.0 - 2026-11-25
+
+### Features
+
+- Send a request's user agent with a lookup, a batch or my_ip, and read its verdict ([`90395c4`](https://github.com/internetdata/sdk-rust/commit/90395c44ad5f22189d7053aeff8a550b9bf53c07))
+- Middleware: allow_bots lets a verified crawler through ([`3fa4d02`](https://github.com/internetdata/sdk-rust/commit/3fa4d02038bdb103f514884a3cc8f3c2b918f0ad))
+
+### Fixes
+
+- Re-pin the spec to 2026.11.25: one paid plan, Data ([`2a8be29`](https://github.com/internetdata/sdk-rust/commit/2a8be29eb2345464b9b29327240f8e562dfca877))
+
 ## 3.4.0 - 2026-11-24
 
 ### Features
