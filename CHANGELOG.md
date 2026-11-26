@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.6.0 - 2026-11-26
+
+### Fixes
+
+- Read a keyless answer without the bot, carrier, satellite and service flags ([`da37873`](https://github.com/internetdata/sdk-rust/commit/da3787382fe200999c81abbe615b1d99c7e78281))
+
 ## 3.5.0 - 2026-11-25
 
 ### Features
