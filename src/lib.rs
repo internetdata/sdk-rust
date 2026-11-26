@@ -25,7 +25,11 @@
 //! which of them the API sends. `None` means "not in your plan", which is a
 //! different answer from `Some(false)`. Read the option itself wherever that
 //! matters, or `unwrap_or(false)` when all you want to know is whether an
-//! address is flagged.
+//! address is flagged. The exception is eight flags a paid plan or the trial
+//! serves and Unlimited does not (`is_bot`, `is_carrier`, `is_satellite`,
+//! `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver` and `is_bittorrent`): they
+//! stay `bool` and read `false` when your plan leaves them out, until the next
+//! major makes them `Option`s.
 //!
 //! # Async only
 //!

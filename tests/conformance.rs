@@ -200,6 +200,19 @@ async fn a_bogon_is_answered_locally_in_the_widest_shape() {
     assert_eq!(stub.count(), 0, "a bogon must not reach the network");
 }
 
+// Held at their public `bool` until the next major: an answer without one reads
+// false, so the corpus's `absent` asks for false here and for none of the others.
+const HELD: [&str; 8] = [
+    "is_bot",
+    "is_carrier",
+    "is_satellite",
+    "is_ssh",
+    "is_smtp",
+    "is_web",
+    "is_dns_resolver",
+    "is_bittorrent",
+];
+
 /// Absent is "not in your plan" and present-and-false is "checked, and no", for
 /// every member, the paid ones inside a shared object included. Each served
 /// answer decodes and re-encodes as it was served, so nothing was dropped,
@@ -236,7 +249,15 @@ async fn a_lookup_preserves_absent_versus_false_across_every_plan_shape() {
         .unwrap_or_else(|e| panic!("{}: {e}", case.name));
 
         let name = &case.name;
-        assert_eq!(wire, case.body, "{name}: the answer does not re-encode as served");
+        let mut served = case.body.clone();
+        if case.call == "lookup" {
+            for member in HELD {
+                if served.get(member).is_none() {
+                    served[member] = json!(false);
+                }
+            }
+        }
+        assert_eq!(wire, served, "{name}: the answer does not re-encode as served");
         for (member, want) in &case.expect.present {
             let got = wire.get(member);
             assert_eq!(got, Some(want), "{name}: {member} must be present and {want}");
@@ -253,7 +274,11 @@ async fn a_lookup_preserves_absent_versus_false_across_every_plan_shape() {
         }
         for member in &case.expect.absent {
             let got = wire.get(member);
-            assert!(got.is_none(), "{name}: {member} must be ABSENT, not {got:?}");
+            if HELD.contains(&member.as_str()) {
+                assert_eq!(got, Some(&json!(false)), "{name}: {member} is held false, not {got:?}");
+            } else {
+                assert!(got.is_none(), "{name}: {member} must be ABSENT, not {got:?}");
+            }
         }
         for (object, members) in &case.expect.absent_in {
             let held = wire.get(object).unwrap_or_else(|| panic!("{name}: {object} is absent"));

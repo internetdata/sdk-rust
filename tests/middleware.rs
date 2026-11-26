@@ -212,8 +212,8 @@ async fn a_condition_reaches_the_evidence_fields() {
     );
 }
 
-/// `is_bot` is answered on every plan, so a condition on it blocks a bot's
-/// address and lets any other through.
+/// A paid answer serves `is_bot`, so a condition on it blocks a bot's address
+/// and lets any other through.
 #[tokio::test]
 async fn a_condition_on_is_bot_blocks_a_bots_address() {
     const BOT_IP: &str = "66.249.66.1";
@@ -233,6 +233,64 @@ async fn a_condition_on_is_bot_blocks_a_bots_address() {
         !Req::from(PUBLIC_IP).evaluate(&core).await.expect("evaluate").blocked,
         "an address no bot uses must pass"
     );
+}
+
+// The eight flags a paid plan or the trial serves and Unlimited does not: held at
+// their public `bool` until the next major, which reads an absent one false.
+const PAID_FLAGS: [&str; 8] = [
+    "is_bot",
+    "is_carrier",
+    "is_satellite",
+    "is_ssh",
+    "is_smtp",
+    "is_web",
+    "is_dns_resolver",
+    "is_bittorrent",
+];
+
+/// The core reads the wire, never the held false: on an Unlimited answer a
+/// condition on one of the eight is a plan gap, on the first request and from the
+/// cache, and a flag the answer serves is judged as served, false included.
+#[tokio::test]
+async fn a_condition_on_a_paid_flag_reports_the_plan_gap_on_unlimited() {
+    for flag in PAID_FLAGS {
+        let stub = Stub::start([
+            answer(PUBLIC_IP, json!({})),
+            answer("66.249.66.1", json!({ flag: true })),
+            answer("66.249.66.2", json!({ flag: false })),
+        ])
+        .await;
+        let (seen, warn) = warnings();
+        let core = |on: OnMissingField| {
+            let client = stub.client().retries(0).build().expect("build");
+            Core::new(
+                Options::new()
+                    .client(client)
+                    .block_condition(vec![Condition::from([(flag, true)])])
+                    .on_missing_field(on)
+                    .on_warn(warn.clone()),
+            )
+            .expect("core")
+        };
+
+        let strict = core(OnMissingField::Fail);
+        for round in ["first", "cached"] {
+            let err = Req::from(PUBLIC_IP).evaluate(&strict).await.expect_err(round);
+            assert!(err.to_string().contains(flag), "{flag}, {round}: {err}");
+        }
+        assert_eq!(stub.count(), 1, "{flag}: the second request was not a cache hit");
+
+        let lenient = core(OnMissingField::Warn);
+        for _ in 0..2 {
+            let found = Req::from(PUBLIC_IP).evaluate(&lenient).await.expect("evaluate");
+            assert!(!found.blocked, "{flag}: a flag the plan lacks never matches");
+        }
+        assert_eq!(seen.lock().unwrap().len(), 1, "{flag}: warned once");
+
+        assert!(Req::from("66.249.66.1").evaluate(&strict).await.expect("evaluate").blocked);
+        let unflagged = Req::from("66.249.66.2").evaluate(&strict).await.expect("a served false");
+        assert!(!unflagged.blocked, "{flag}: a served false is judged as served");
+    }
 }
 
 #[tokio::test]

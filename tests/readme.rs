@@ -19,7 +19,7 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", result.location.country);
     println!("{}", result.asn.name);
     println!("{}", result.is_tor);
-    println!("{}", result.is_bot);
+    println!("{}", result.is_anycast);
 
     let client = Client::builder().api_key(std::env::var("INTERNETDATA_API_KEY")?).build()?;
 
@@ -122,6 +122,7 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
 
     result.is_hosting.unwrap_or(false);
     result.is_hosting.is_none();
+    result.bot.is_none();
     result.trial_expired == Some(true);
     result.cap_reached == Some(true);
     Ok(())

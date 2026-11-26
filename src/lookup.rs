@@ -1,5 +1,8 @@
 use std::ops::Deref;
 
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer};
+
 use crate::models::LookupResponse;
 
 /// What a lookup answers.
@@ -11,6 +14,15 @@ use crate::models::LookupResponse;
 /// every member a plan can leave out is an `Option`, the paid ones inside a
 /// shared object too (`location.city`, `asn.rpki_status`).
 ///
+/// Eight flags are the exception, kept `bool` for the type they have always
+/// had: `is_bot`, `is_carrier`, `is_satellite`, `is_ssh`, `is_smtp`, `is_web`,
+/// `is_dns_resolver` and `is_bittorrent`. They are a paid plan's or the
+/// trial's, and an answer that leaves one out, Unlimited's, reads `false`, as
+/// it did before Unlimited stopped serving them (2026-11-26). The detail
+/// beside each (`result.bot`, `result.carrier`) tells the two apart: `None`
+/// where the plan lacks the flag, present where it is served. The next major
+/// makes them `Option`s.
+///
 /// A detail object that is present but empty means the flag above it is false.
 /// A populated one always carries every one of its keys, empty values included.
 ///
@@ -21,13 +33,70 @@ use crate::models::LookupResponse;
 /// for a bogon.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lookup {
-    /// The answer as it was served, with the wire's own optionality intact.
+    /// The answer as it was served, with the wire's own optionality intact but
+    /// for the eight flags above, which read `false` when it left one out.
     pub answer: LookupResponse,
 }
 
 impl Lookup {
     pub(crate) fn served(answer: LookupResponse) -> Self {
         Self { answer }
+    }
+}
+
+/// The flags a paid plan or the trial serves and Unlimited does not, held
+/// `bool` until the next major: the generator's `HELD_FLAGS` names the same.
+pub(crate) const HELD_FLAGS: [&str; 8] = [
+    "is_bot",
+    "is_carrier",
+    "is_satellite",
+    "is_ssh",
+    "is_smtp",
+    "is_web",
+    "is_dns_resolver",
+    "is_bittorrent",
+];
+
+/// A [`Lookup`] and which held flags its wire answer left out. The public
+/// `bool` reads those `false`; the middleware reads them as absent, which is
+/// what makes a condition on one report the plan gap instead of never
+/// matching quietly. It is what the cache and the requests in flight hold, so
+/// a cached answer keeps what the wire said.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Served {
+    pub(crate) lookup: Lookup,
+    pub(crate) absent: Vec<&'static str>,
+}
+
+impl Served {
+    /// An answer computed here, which carries every flag.
+    pub(crate) fn whole(lookup: Lookup) -> Self {
+        Self { lookup, absent: Vec::new() }
+    }
+
+    pub(crate) fn from_value(wire: serde_json::Value) -> Result<Self, serde_json::Error> {
+        let absent = HELD_FLAGS.into_iter().filter(|flag| wire.get(flag).is_none()).collect();
+        let answer = serde_json::from_value::<LookupResponse>(wire)?;
+        Ok(Self { lookup: Lookup::served(answer), absent })
+    }
+
+    /// The answer as the wire served it: JSON that leaves out each held flag
+    /// the wire left out.
+    pub(crate) fn wire(&self) -> serde_json::Value {
+        let mut wire = serde_json::to_value(&self.lookup.answer).unwrap_or(serde_json::Value::Null);
+        if let Some(members) = wire.as_object_mut() {
+            for flag in &self.absent {
+                members.remove(*flag);
+            }
+        }
+        wire
+    }
+}
+
+impl<'de> Deserialize<'de> for Served {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire = serde_json::Value::deserialize(deserializer)?;
+        Self::from_value(wire).map_err(D::Error::custom)
     }
 }
 

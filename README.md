@@ -18,7 +18,7 @@ Requires Rust 1.85 or newer. Everything is `async` and runs on tokio.
 
 ## Usage
 
-**No API key needed to start.** Unlimited, the free plan, answers the Tor, relay and bot flags, InternetData's own flags such as `is_anycast` and `is_web`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, with no daily or monthly cap, with a key or without one.
+**No API key needed to start.** Unlimited, the free plan, answers the Tor and relay flags, `is_anycast`, `location` to the country, `asn`, `company`, `hostname` and the abuse email, with no daily or monthly cap, with a key or without one.
 
 ```rust
 use internetdata::Client;
@@ -29,12 +29,12 @@ let result = client.lookup("146.70.116.130").await?;
 println!("{}", result.location.country);    // AT
 println!("{}", result.asn.name);            // M247 Europe SRL
 println!("{}", result.is_tor);              // false
-println!("{}", result.is_bot);              // false: not a crawler's or another bot's address
+println!("{}", result.is_anycast);          // false
 ```
 
 ### With an API key
 
-A paid plan answers every field: `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags as well, the detail behind each flag, the city-level location, `whois` and `rwhois`, and `user_agent` when you send one ([below](#is-that-crawler-real)). A free account tries every field. Create a key in the console, then pass it in:
+A paid plan answers every field: `is_vpn`, `is_hosting`, `is_cdn`, the four proxy flags, `is_bot` and the carrier, satellite and service flags (`is_carrier`, `is_satellite`, `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver`, `is_bittorrent`) as well, the detail behind each flag, the city-level location, `whois` and `rwhois`, and `user_agent` when you send one ([below](#is-that-crawler-real)). A free account tries every field. Create a key in the console, then pass it in:
 
 ```rust
 let client = Client::builder()
@@ -400,11 +400,12 @@ let result = runtime.block_on(client.lookup("146.70.116.130"))?;
 
 ### Absent is not false
 
-Unlimited leaves out `is_vpn`, `is_hosting`, `is_cdn` and the four proxy flags, the detail behind every flag but Tor's and relay's, `user_agent`, and the paid members of the shared objects, `location.city` among them; a free-plan key's answer carries `trial_expired`, true once its trial is spent. A paid key's carries `cap_reached`, true once its organization's overage cap is reached, when the answer has Unlimited's fields and isn't billed. Every member a plan can leave out is an `Option`, because your key decides which of them the API sends. `None` means "not in your plan", which is not the same answer as `Some(false)`, which means "checked, and no".
+Unlimited leaves out `is_vpn`, `is_hosting`, `is_cdn`, the four proxy flags, `is_bot` and the carrier, satellite and service flags, the detail behind every flag but Tor's and relay's, `user_agent`, and the paid members of the shared objects, `location.city` among them; a free-plan key's answer carries `trial_expired`, true once its trial is spent. A paid key's carries `cap_reached`, true once its organization's overage cap is reached, when the answer has Unlimited's fields and isn't billed. Every member a plan can leave out is an `Option`, because your key decides which of them the API sends, except the eight flags `is_bot`, `is_carrier`, `is_satellite`, `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver` and `is_bittorrent`: they stay `bool` and read `false` when your plan leaves them out, as Unlimited's answer read until 2026-11-26, and the next major makes them `Option`s. `None` means "not in your plan", which is not the same answer as `Some(false)`, which means "checked, and no".
 
 ```rust
 result.is_hosting.unwrap_or(false);   // when you only want the flag
 result.is_hosting.is_none();          // on Unlimited: not in your plan
+result.bot.is_none();                 // on Unlimited: not in your plan, whatever is_bot reads
 result.trial_expired == Some(true);   // a free-plan key's trial is spent
 result.cap_reached == Some(true);     // a paid key is past its overage cap
 ```

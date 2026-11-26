@@ -14,9 +14,9 @@ use crate::database::DatabaseApi;
 use crate::entitlement::Entitlement;
 use crate::error::{Error, ErrorKind};
 use crate::flight::{Flights, restate};
-use crate::lookup::Lookup;
+use crate::lookup::{Lookup, Served};
+use crate::models::DomainLookupResponse;
 use crate::models::{AsnLookupResponse, BatchLookupError, BatchLookupRequest};
-use crate::models::{DomainLookupResponse, LookupResponse};
 use crate::oauth::{OauthApi, OauthError, authorization_server};
 use crate::transport::{Transport, encode_path_segment};
 
@@ -66,7 +66,7 @@ pub struct Client(Arc<Inner>);
 #[derive(Debug)]
 struct Inner {
     transport: Transport,
-    cache: Option<Cache<String, Lookup>>,
+    cache: Option<Cache<String, Served>>,
     /// The addresses with a request in flight, shared by a lookup and a batch.
     /// Only a client that caches shares them: without a cache every lookup is
     /// served, as [`ClientBuilder::no_cache`] promises.
@@ -117,6 +117,16 @@ impl Client {
     /// and agent takes that request's answer, sent under the options of the call
     /// that led it.
     pub async fn lookup_with(&self, ip: &str, opts: LookupOptions) -> Result<Lookup, Error> {
+        self.lookup_served(ip, opts).await.map(|served| served.lookup)
+    }
+
+    /// [`Client::lookup_with`], with which held flags the wire left out beside
+    /// the answer, for the middleware.
+    pub(crate) async fn lookup_served(
+        &self,
+        ip: &str,
+        opts: LookupOptions,
+    ) -> Result<Served, Error> {
         let timeout = self.call_timeout(opts.timeout)?;
         let retries = opts.retries.unwrap_or(self.0.retries);
         if ip.parse::<IpAddr>().is_err() {
@@ -128,7 +138,7 @@ impl Client {
         let carried = unmapped(ip);
         let ip: &str = &carried;
         if is_bogon(ip) {
-            return Ok(bogon_lookup(ip));
+            return Ok(Served::whole(bogon_lookup(ip)));
         }
         let agent = opts.agent();
         let Some(cache) = &self.0.cache else {
@@ -155,8 +165,8 @@ impl Client {
                 Some(hit) => Ok(hit),
                 None => {
                     let answer = self.serve(ip, agent, retries, timeout).await;
-                    if let Ok(lookup) = &answer {
-                        cache.insert(key.to_owned(), lookup.clone()).await;
+                    if let Ok(served) = &answer {
+                        cache.insert(key.to_owned(), served.clone()).await;
                     }
                     answer
                 }
@@ -172,12 +182,10 @@ impl Client {
         agent: Option<&str>,
         retries: u32,
         timeout: Duration,
-    ) -> Result<Lookup, Error> {
+    ) -> Result<Served, Error> {
         let path = format!("/{}", encode_path_segment(ip));
         let query = agent_query(agent);
-        let answer: LookupResponse =
-            with_retry(retries, || self.0.transport.get_json(&path, &query, timeout)).await?;
-        Ok(Lookup::served(answer))
+        with_retry(retries, || self.0.transport.get_json(&path, &query, timeout)).await
     }
 
     /// What every database says about the address this client is calling from.
@@ -199,11 +207,11 @@ impl Client {
     pub async fn my_ip_with(&self, opts: LookupOptions) -> Result<Lookup, Error> {
         let timeout = self.call_timeout(opts.timeout)?;
         let query = agent_query(opts.agent());
-        let answer: LookupResponse = with_retry(opts.retries.unwrap_or(self.0.retries), || {
+        let served: Served = with_retry(opts.retries.unwrap_or(self.0.retries), || {
             self.0.transport.get_json("/myip", &query, timeout)
         })
         .await?;
-        Ok(Lookup::served(answer))
+        Ok(served.lookup)
     }
 
     /// What this client's key is entitled to, and how much of it has been used.
@@ -300,13 +308,13 @@ impl Client {
         }
         let timeout = opts.timeout.unwrap_or(self.0.timeout);
 
-        let mut answers: HashMap<String, Result<Lookup, Error>> =
+        let mut answers: HashMap<String, Result<Served, Error>> =
             HashMap::with_capacity(unique.len());
         let mut pending: Vec<String> = Vec::new();
         for ip in &unique {
             let address = &pairs[ip].ip;
             if is_bogon(address) {
-                answers.insert(ip.clone(), Ok(bogon_lookup(address)));
+                answers.insert(ip.clone(), Ok(Served::whole(bogon_lookup(address))));
                 continue;
             }
             if let Some(cache) = &self.0.cache {
@@ -372,7 +380,7 @@ impl Client {
                         timeout: Some(timeout),
                         user_agent: pair.agent.clone(),
                     };
-                    self.lookup_with(&pair.ip, opts).await
+                    self.lookup_served(&pair.ip, opts).await
                 }
             };
             answers.insert(ip, answer);
@@ -395,7 +403,7 @@ impl Client {
                 } else {
                     restate(answers.get(wire).expect("every address is answered"))
                 };
-                (ip, answer)
+                (ip, answer.map(|served| served.lookup))
             })
             .collect()
     }
@@ -411,7 +419,7 @@ impl Client {
         chunk: Vec<Pair>,
         retries: u32,
         timeout: Duration,
-    ) -> Vec<(String, Result<Lookup, Error>)> {
+    ) -> Vec<(String, Result<Served, Error>)> {
         let agents: HashMap<String, String> =
             chunk.iter().filter_map(|pair| Some((pair.ip.clone(), pair.agent.clone()?))).collect();
         let request = BatchLookupRequest {
@@ -430,13 +438,12 @@ impl Client {
         let mut out = Vec::with_capacity(chunk.len());
         for Pair { key, ip, .. } in chunk {
             let answer = if let Some(served) = body.results.remove(&ip) {
-                match serde_json::from_value::<LookupResponse>(served) {
+                match Served::from_value(served) {
                     Ok(served) => {
-                        let lookup = Lookup::served(served);
                         if let Some(cache) = &self.0.cache {
-                            cache.insert(key.clone(), lookup.clone()).await;
+                            cache.insert(key.clone(), served.clone()).await;
                         }
-                        Ok(lookup)
+                        Ok(served)
                     }
                     Err(err) => Err(unreadable_entry(&ip, &err)),
                 }
@@ -980,15 +987,16 @@ struct AnswerLife {
 }
 
 impl AnswerLife {
-    fn of(&self, answer: &Lookup) -> Duration {
+    fn of(&self, answer: &Served) -> Duration {
+        let answer = &answer.lookup;
         let reduced = answer.trial_expired == Some(true) || answer.cap_reached == Some(true);
         if reduced { self.ttl.min(REDUCED_ANSWER_TTL) } else { self.ttl }
     }
 }
 
-impl moka::Expiry<String, Lookup> for AnswerLife {
+impl moka::Expiry<String, Served> for AnswerLife {
     #[cfg_attr(not(test), allow(unused_variables))]
-    fn expire_after_create(&self, ip: &String, answer: &Lookup, at: Instant) -> Option<Duration> {
+    fn expire_after_create(&self, ip: &String, answer: &Served, at: Instant) -> Option<Duration> {
         let life = self.of(answer);
         #[cfg(test)]
         self.expiries.lock().unwrap().insert(ip.clone(), at + life);
@@ -1000,7 +1008,7 @@ impl moka::Expiry<String, Lookup> for AnswerLife {
     fn expire_after_update(
         &self,
         ip: &String,
-        answer: &Lookup,
+        answer: &Served,
         at: Instant,
         _remaining: Option<Duration>,
     ) -> Option<Duration> {

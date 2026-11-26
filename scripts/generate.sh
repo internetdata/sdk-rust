@@ -82,6 +82,15 @@ mkdir -p .gen/spec
 # finding nothing to change stops the script, rather than reaching the release
 # unnoticed.
 #
+# The eight flags spec 2026.11.26 stopped requiring (Unlimited no longer serves
+# them) stay the plain `bool` they have been, so a caller reads what it read
+# before: the generator reads them as required again, and one the wire leaves
+# out defaults to false below, while a served one that is no boolean still
+# fails the call. src/lookup.rs keeps which ones the wire left out, for the
+# middleware. The next major types them `Option<bool>`.
+HELD_FLAGS="is_bot is_carrier is_satellite is_ssh is_smtp is_web is_dns_resolver is_bittorrent"
+export HELD_FLAGS
+
 # The seen days below (spec 2026.11.23) stay the String they have been rather
 # than the chrono::NaiveDate their `format: date` asks for; each still reads
 # through src/dates.rs, which refuses a value that is not a full-date (below).
@@ -97,6 +106,14 @@ export SEEN_DAYS
 perl -0777 -pe '
     $n = s/(\n {8}asn:\n {10}type: integer\n) {10}format: int64\n/$1/g;
     die "no int64 asn member to hold back\n" unless $n;
+    s{(\n    LookupResponse:\n.*?\n      required:\n)((?: {8}- \w+\n)*)}{
+        my ($head, $list) = ($1, $2);
+        for my $flag (split " ", $ENV{HELD_FLAGS}) {
+            die "the spec requires $flag again: stop holding it\n" if $list =~ /^ {8}- \Q$flag\E$/m;
+            $list .= "        - $flag\n";
+        }
+        $head . $list;
+    }se or die "LookupResponse has no required list to hold the flags in\n";
     s{(\n    Asn:\n.*?\n      required:\n(?: {8}- \w+\n)*?) {8}- country\n {8}- rpki_status\n}{$1}s
         or die "the AS no longer requires country and rpki_status\n";
     for my $day (split " ", $ENV{SEEN_DAYS}) {
@@ -138,6 +155,16 @@ for member in is_bot; do
         my $m = $ENV{MEMBER};
         s/(pub fn new\([^)]*?)\s*\b$m: bool,([^)]*\) -> LookupResponse \{\s*LookupResponse \{[^}]*?)\b$m,/$1$2$m: false,/s
             or die "LookupResponse::new no longer takes $m: teach this script its shape\n";
+    ' src/generated/models/lookup_response.rs
+done
+
+# A held flag the wire leaves out reads false. A member named here that the
+# generator stops emitting as a plain `bool` stops the script.
+for member in $HELD_FLAGS; do
+    MEMBER="$member" perl -0777 -pi -e '
+        my $m = $ENV{MEMBER};
+        s/(#\[serde\(rename = "$m")(\)\]\s+pub $m: bool,)/$1, default$2/
+            or die "LookupResponse.$m is no plain bool member: teach this script its shape\n";
     ' src/generated/models/lookup_response.rs
 done
 

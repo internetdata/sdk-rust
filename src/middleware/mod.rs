@@ -286,8 +286,8 @@ impl Core {
         if let Some(agent) = &agent {
             lookup = lookup.user_agent(agent.clone());
         }
-        let result = match self.client.lookup_with(&ip, lookup).await {
-            Ok(result) => result,
+        let served = match self.client.lookup_served(&ip, lookup).await {
+            Ok(served) => served,
             Err(error) => {
                 return Ok(Lookup {
                     blocked: self.fail_closed,
@@ -298,6 +298,7 @@ impl Core {
             }
         };
 
+        let result = &served.lookup;
         if agent.is_some() && !result.is_bogon && result.user_agent.is_none() {
             self.report(
                 "allow_bots sent the request's user agent, and the answer carries no user_agent \
@@ -316,12 +317,12 @@ impl Core {
                 // Only rendered when a condition exists: matching is by WIRE
                 // name, and rendering it for every request that never had a
                 // policy would be pure cost.
-                let answer = serde_json::to_value(&result.answer).unwrap_or(Json::Null);
+                let answer = served.wire();
                 self.report_missing(condition, &answer)?;
                 condition::matches(condition, &answer)
             }
         };
-        Ok(Lookup { blocked, ip: Some(ip), result: Some(result), error: None })
+        Ok(Lookup { blocked, ip: Some(ip), result: Some(served.lookup), error: None })
     }
 
     fn report_missing(&self, condition: &[Condition], answer: &Json) -> Result<(), ConditionError> {

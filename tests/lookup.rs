@@ -287,8 +287,8 @@ async fn or_false_readers_coalesce_an_absent_flag() {
     assert_eq!(result.is_dcproxy, None, "the reader must not populate what it reads");
 }
 
-/// `is_bot` is on every answer, and a paid answer's `bot` says whose bot it is:
-/// both read off the result, and an answer without `is_bot` is no answer.
+/// A paid answer's `is_bot` and `bot` say whose bot it is: both read off the
+/// result.
 #[tokio::test]
 async fn a_bots_answer_says_so_and_whose_bot_it_is() {
     let mut body = answer_value("66.249.66.1");
@@ -305,13 +305,7 @@ async fn a_bots_answer_says_so_and_whose_bot_it_is() {
         "first_seen": "2026-11-21",
         "last_seen": "2026-11-21",
     });
-    let mut unflagged = answer_value("45.83.91.1");
-    unflagged.as_object_mut().expect("an object").remove("is_bot");
-    let stub = Stub::start([
-        ("/66.249.66.1".to_owned(), Route::ok(body.to_string())),
-        ("/45.83.91.1".to_owned(), Route::ok(unflagged.to_string())),
-    ])
-    .await;
+    let stub = Stub::start([("/66.249.66.1".to_owned(), Route::ok(body.to_string()))]).await;
     let client = stub.client().retries(0).build().expect("build");
 
     let result = client.lookup("66.249.66.1").await.expect("lookup");
@@ -320,9 +314,106 @@ async fn a_bots_answer_says_so_and_whose_bot_it_is() {
     assert_eq!(bot.provider_name.as_deref(), Some("Google"));
     assert_eq!(bot.agents.as_deref(), Some(&["Googlebot".to_owned()][..]));
     assert_eq!(bot.verified, Some(true));
+}
 
-    let err = client.lookup("45.83.91.1").await.expect_err("an answer without is_bot");
-    assert_eq!(err.kind(), ErrorKind::ServerError, "{err}");
+// The eight flags a paid plan or the trial serves and Unlimited does not: held at
+// their public `bool` until the next major, so an answer without one reads false.
+const HELD: [&str; 8] = [
+    "is_bot",
+    "is_carrier",
+    "is_satellite",
+    "is_ssh",
+    "is_smtp",
+    "is_web",
+    "is_dns_resolver",
+    "is_bittorrent",
+];
+
+fn held_flags(answer: &internetdata::LookupResponse) -> [bool; 8] {
+    [
+        answer.is_bot,
+        answer.is_carrier,
+        answer.is_satellite,
+        answer.is_ssh,
+        answer.is_smtp,
+        answer.is_web,
+        answer.is_dns_resolver,
+        answer.is_bittorrent,
+    ]
+}
+
+/// An Unlimited answer carries none of the eight, and reads as every answer
+/// read until 2026-11-26: false, from a lookup, my_ip and a batch entry alike.
+/// One that serves them reads them as served.
+#[tokio::test]
+async fn an_answer_without_the_eight_paid_flags_reads_them_false() {
+    let mut paid = answer_value("66.249.66.1");
+    for flag in HELD {
+        paid[flag] = serde_json::json!(true);
+    }
+    let unlimited = answer_value("45.83.91.1");
+    assert!(HELD.iter().all(|flag| unlimited.get(flag).is_none()), "the stub is Unlimited's");
+    let stub = Stub::start([
+        ("/66.249.66.1".to_owned(), Route::ok(paid.to_string())),
+        ("/45.83.91.1".to_owned(), Route::ok(unlimited.to_string())),
+        ("/myip".to_owned(), Route::ok(unlimited.to_string())),
+        ("/8.8.4.4".to_owned(), Route::ok(answer("8.8.4.4"))),
+    ])
+    .await;
+    let client = stub.client().retries(0).build().expect("build");
+
+    let served = client.lookup("66.249.66.1").await.expect("lookup");
+    assert_eq!(held_flags(&served), [true; 8], "a served true reads true");
+    let lookup = client.lookup("45.83.91.1").await.expect("an answer without the eight");
+    assert_eq!(held_flags(&lookup), [false; 8], "an absent flag reads false");
+    let myip = client.my_ip().await.expect("my_ip without the eight");
+    assert_eq!(held_flags(&myip), [false; 8], "my_ip reads them false");
+    let again = client.lookup("45.83.91.1").await.expect("from the cache");
+    assert_eq!(held_flags(&again), [false; 8], "a cached answer reads them false");
+
+    let mut batch =
+        client.lookup_batch(["66.249.66.1", "8.8.4.4"], BatchOptions::new().concurrency(1)).await;
+    let paid = batch.swap_remove("66.249.66.1").expect("answered").expect("a batch entry");
+    assert_eq!(held_flags(&paid), [true; 8], "a batch entry that serves them");
+    let plain = batch.swap_remove("8.8.4.4").expect("answered").expect("a batch entry");
+    assert_eq!(held_flags(&plain), [false; 8], "a batch entry without them");
+}
+
+/// A held flag the wire does serve is read as strictly as it was when the spec
+/// required it: no string, number or null stands in for a boolean.
+#[tokio::test]
+async fn a_paid_flag_that_is_no_boolean_is_a_retried_server_error() {
+    let wrong = [("a string", serde_json::json!("true")), ("a number", serde_json::json!(1))];
+    let wrong = wrong.into_iter().chain([("null", serde_json::Value::Null)]);
+    for (kind, value) in wrong {
+        for flag in HELD {
+            let mut body = answer_value("9.9.9.9");
+            body[flag] = value.clone();
+            let stub = Stub::start([("/9.9.9.9".to_owned(), Route::ok(body.to_string()))]).await;
+            let client = stub.client().no_cache().retries(0).build().expect("build");
+
+            let err = client.lookup("9.9.9.9").await.expect_err("an unreadable flag");
+
+            assert_eq!(err.kind(), ErrorKind::ServerError, "{flag} as {kind}: {err}");
+            assert_eq!(err.status(), Some(200), "{flag} as {kind}: the status");
+
+            let results =
+                serde_json::json!({ "9.9.9.9": body, "8.8.4.4": answer_value("8.8.4.4") });
+            let batch = serde_json::json!({ "results": results, "errors": {} });
+            let stub = Stub::start([]).await;
+            stub.sequence("/batch", [Route::ok(batch.to_string())]);
+            let client = stub.client().retries(0).build().expect("build");
+
+            let mut answers =
+                client.lookup_batch(["9.9.9.9", "8.8.4.4"], BatchOptions::new()).await;
+
+            let Err(err) = answers.swap_remove("9.9.9.9").expect("answered") else {
+                panic!("{flag} as {kind}: a batch entry read as an answer")
+            };
+            assert_eq!(err.kind(), ErrorKind::ServerError, "{flag} as {kind}: {err}");
+            answers.swap_remove("8.8.4.4").expect("answered").expect("the other entry");
+        }
+    }
 }
 
 /// A 2xx a call cannot read is no answer: the server_error an outage is,
