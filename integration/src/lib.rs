@@ -92,7 +92,8 @@ pub async fn keyless_client_for(origin: &str) -> (Client, Arc<Recorder>) {
 }
 
 // The eight flags the crate holds `bool` until its next major: an answer that
-// leaves one out is held false, the one member the client may hold unserved.
+// leaves one out is held false, and one that leaves out the AS's `type` holds
+// it empty, the only members the client may hold unserved.
 const HELD_FLAGS: [&str; 8] = [
     "is_bot",
     "is_carrier",
@@ -127,6 +128,10 @@ fn same_member(label: &str, path: &str, wire: &Value, held: &Value) {
                 let Some(served) = wire.get(name) else {
                     if path == "the answer" && HELD_FLAGS.contains(&name.as_str()) {
                         assert_eq!(value, &Value::Bool(false), "{label}: {name} must read false");
+                        continue;
+                    }
+                    if path == "the answer.asn" && name == "type" {
+                        assert_eq!(value, &Value::from(""), "{label}: asn.type must read empty");
                         continue;
                     }
                     panic!("{label}: the client holds {path}.{name}, which the wire never served")

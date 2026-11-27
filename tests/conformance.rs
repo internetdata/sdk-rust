@@ -202,6 +202,7 @@ async fn a_bogon_is_answered_locally_in_the_widest_shape() {
 
 // Held at their public `bool` until the next major: an answer without one reads
 // false, so the corpus's `absent` asks for false here and for none of the others.
+// The AS's `type` is held the same way as a `String`, which reads empty.
 const HELD: [&str; 8] = [
     "is_bot",
     "is_carrier",
@@ -256,6 +257,9 @@ async fn a_lookup_preserves_absent_versus_false_across_every_plan_shape() {
                     served[member] = json!(false);
                 }
             }
+            if served["asn"].get("type").is_none() {
+                served["asn"]["type"] = json!("");
+            }
         }
         assert_eq!(wire, served, "{name}: the answer does not re-encode as served");
         for (member, want) in &case.expect.present {
@@ -284,7 +288,15 @@ async fn a_lookup_preserves_absent_versus_false_across_every_plan_shape() {
             let held = wire.get(object).unwrap_or_else(|| panic!("{name}: {object} is absent"));
             for member in members {
                 let got = held.get(member);
-                assert!(got.is_none(), "{name}: {object}.{member} must be ABSENT, not {got:?}");
+                if case.call == "lookup" && (object.as_str(), member.as_str()) == ("asn", "type") {
+                    assert_eq!(
+                        got,
+                        Some(&json!("")),
+                        "{name}: asn.type is held empty, not {got:?}"
+                    );
+                } else {
+                    assert!(got.is_none(), "{name}: {object}.{member} must be ABSENT, not {got:?}");
+                }
             }
         }
     }

@@ -123,6 +123,7 @@ async fn lookup_snippets() -> Result<(), Box<dyn std::error::Error>> {
     result.is_hosting.unwrap_or(false);
     result.is_hosting.is_none();
     result.bot.is_none();
+    result.asn.r#type.is_empty();
     result.trial_expired == Some(true);
     result.cap_reached == Some(true);
     Ok(())

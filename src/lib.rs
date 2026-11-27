@@ -28,8 +28,9 @@
 //! address is flagged. The exception is eight flags a paid plan or the trial
 //! serves and Unlimited does not (`is_bot`, `is_carrier`, `is_satellite`,
 //! `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver` and `is_bittorrent`): they
-//! stay `bool` and read `false` when your plan leaves them out, until the next
-//! major makes them `Option`s.
+//! stay `bool` and read `false` when your plan leaves them out. So does the
+//! network's `asn.type`, a `String` that reads empty. The next major makes all
+//! nine `Option`s.
 //!
 //! # Async only
 //!

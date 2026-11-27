@@ -23,8 +23,8 @@ pub struct Asn {
     /// Its operator's domain.
     #[serde(rename = "domain")]
     pub domain: String,
-    /// The kind of network it runs.
-    #[serde(rename = "type")]
+    /// The kind of network it runs. On a paid plan or the trial.
+    #[serde(rename = "type", default)]
     pub r#type: String,
     /// The announced prefix covering the address.
     #[serde(rename = "prefix")]

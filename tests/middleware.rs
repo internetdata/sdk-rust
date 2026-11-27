@@ -293,6 +293,63 @@ async fn a_condition_on_a_paid_flag_reports_the_plan_gap_on_unlimited() {
     }
 }
 
+/// The network's type is a paid plan's, held `String` and read empty when it is
+/// absent: the core reads the wire, so on an Unlimited answer a condition on it
+/// is a plan gap named by its path, on the first request and from the cache, and
+/// a type the answer serves is judged as served.
+#[tokio::test]
+async fn a_condition_on_the_networks_type_reports_the_plan_gap_on_unlimited() {
+    let stub = Stub::start([
+        answer(PUBLIC_IP, json!({})),
+        answer(
+            "66.249.66.1",
+            json!({ "asn": { "asn": 9009, "name": "M247 Europe SRL",
+            "domain": "m247global.com", "type": "hosting", "prefix": "146.70.116.0/24",
+            "country": "RO", "rpki_status": "valid" } }),
+        ),
+        answer(
+            "66.249.66.2",
+            json!({ "asn": { "asn": 9009, "name": "M247 Europe SRL",
+            "domain": "m247global.com", "type": "isp", "prefix": "146.70.116.0/24",
+            "country": "RO", "rpki_status": "valid" } }),
+        ),
+    ])
+    .await;
+    let (seen, warn) = warnings();
+    let core = |on: OnMissingField| {
+        let client = stub.client().retries(0).build().expect("build");
+        Core::new(
+            Options::new()
+                .client(client)
+                .block_condition(vec![Condition::from([(
+                    "asn",
+                    Condition::from([("type", "hosting")]),
+                )])])
+                .on_missing_field(on)
+                .on_warn(warn.clone()),
+        )
+        .expect("core")
+    };
+
+    let strict = core(OnMissingField::Fail);
+    for round in ["first", "cached"] {
+        let err = Req::from(PUBLIC_IP).evaluate(&strict).await.expect_err(round);
+        assert!(err.to_string().contains("asn.type"), "{round}: {err}");
+    }
+    assert_eq!(stub.count(), 1, "the second request was not a cache hit");
+
+    let lenient = core(OnMissingField::Warn);
+    for _ in 0..2 {
+        let found = Req::from(PUBLIC_IP).evaluate(&lenient).await.expect("evaluate");
+        assert!(!found.blocked, "a type the plan lacks never matches");
+    }
+    assert_eq!(seen.lock().unwrap().len(), 1, "warned once");
+
+    assert!(Req::from("66.249.66.1").evaluate(&strict).await.expect("evaluate").blocked);
+    let other = Req::from("66.249.66.2").evaluate(&strict).await.expect("a served type");
+    assert!(!other.blocked, "another served type is judged as served");
+}
+
 #[tokio::test]
 async fn a_bound_reaches_the_numeric_evidence() {
     let stub =

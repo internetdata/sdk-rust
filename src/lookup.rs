@@ -20,8 +20,9 @@ use crate::models::LookupResponse;
 /// trial's, and an answer that leaves one out, Unlimited's, reads `false`, as
 /// it did before Unlimited stopped serving them (2026-11-26). The detail
 /// beside each (`result.bot`, `result.carrier`) tells the two apart: `None`
-/// where the plan lacks the flag, present where it is served. The next major
-/// makes them `Option`s.
+/// where the plan lacks the flag, present where it is served. So is the AS's
+/// `type`, a `String` that reads `""` when your plan leaves it out. The next
+/// major makes them `Option`s.
 ///
 /// A detail object that is present but empty means the flag above it is false.
 /// A populated one always carries every one of its keys, empty values included.
@@ -34,7 +35,8 @@ use crate::models::LookupResponse;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lookup {
     /// The answer as it was served, with the wire's own optionality intact but
-    /// for the eight flags above, which read `false` when it left one out.
+    /// for the eight flags and `asn.type` above, which read `false` and `""`
+    /// when it left one out.
     pub answer: LookupResponse,
 }
 
@@ -44,24 +46,27 @@ impl Lookup {
     }
 }
 
-/// The flags a paid plan or the trial serves and Unlimited does not, held
-/// `bool` until the next major: the generator's `HELD_FLAGS` names the same.
-pub(crate) const HELD_FLAGS: [&str; 8] = [
-    "is_bot",
-    "is_carrier",
-    "is_satellite",
-    "is_ssh",
-    "is_smtp",
-    "is_web",
-    "is_dns_resolver",
-    "is_bittorrent",
+/// The members a paid plan or the trial serves and Unlimited does not, held
+/// at the type they have always had until the next major, as JSON pointers
+/// into the wire answer: the eight flags the generator's `HELD_FLAGS` names,
+/// and the AS's type, which it holds beside them.
+pub(crate) const HELD: [&str; 9] = [
+    "/is_bot",
+    "/is_carrier",
+    "/is_satellite",
+    "/is_ssh",
+    "/is_smtp",
+    "/is_web",
+    "/is_dns_resolver",
+    "/is_bittorrent",
+    "/asn/type",
 ];
 
-/// A [`Lookup`] and which held flags its wire answer left out. The public
-/// `bool` reads those `false`; the middleware reads them as absent, which is
-/// what makes a condition on one report the plan gap instead of never
-/// matching quietly. It is what the cache and the requests in flight hold, so
-/// a cached answer keeps what the wire said.
+/// A [`Lookup`] and which held members its wire answer left out. The public
+/// value reads those `false` or `""`; the middleware reads them as absent,
+/// which is what makes a condition on one report the plan gap instead of
+/// never matching quietly. It is what the cache and the requests in flight
+/// hold, so a cached answer keeps what the wire said.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Served {
     pub(crate) lookup: Lookup,
@@ -69,24 +74,25 @@ pub(crate) struct Served {
 }
 
 impl Served {
-    /// An answer computed here, which carries every flag.
+    /// An answer computed here, which carries every member.
     pub(crate) fn whole(lookup: Lookup) -> Self {
         Self { lookup, absent: Vec::new() }
     }
 
     pub(crate) fn from_value(wire: serde_json::Value) -> Result<Self, serde_json::Error> {
-        let absent = HELD_FLAGS.into_iter().filter(|flag| wire.get(flag).is_none()).collect();
+        let absent = HELD.into_iter().filter(|member| wire.pointer(member).is_none()).collect();
         let answer = serde_json::from_value::<LookupResponse>(wire)?;
         Ok(Self { lookup: Lookup::served(answer), absent })
     }
 
-    /// The answer as the wire served it: JSON that leaves out each held flag
+    /// The answer as the wire served it: JSON that leaves out each held member
     /// the wire left out.
     pub(crate) fn wire(&self) -> serde_json::Value {
         let mut wire = serde_json::to_value(&self.lookup.answer).unwrap_or(serde_json::Value::Null);
-        if let Some(members) = wire.as_object_mut() {
-            for flag in &self.absent {
-                members.remove(*flag);
+        for path in &self.absent {
+            let Some((parent, member)) = path.rsplit_once('/') else { continue };
+            if let Some(members) = wire.pointer_mut(parent).and_then(|at| at.as_object_mut()) {
+                members.remove(member);
             }
         }
         wire

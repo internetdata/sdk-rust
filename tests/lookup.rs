@@ -416,6 +416,81 @@ async fn a_paid_flag_that_is_no_boolean_is_a_retried_server_error() {
     }
 }
 
+/// The network's `type` is a paid plan's: an Unlimited answer carries none, and
+/// the `String` it has always been reads empty, from a lookup, my_ip, the cache
+/// and a batch entry alike. One that serves it reads it as served.
+#[tokio::test]
+async fn an_answer_without_the_networks_type_reads_it_empty() {
+    let mut paid = answer_value("66.249.66.1");
+    paid["asn"]["type"] = serde_json::json!("hosting");
+    let unlimited = answer_value("45.83.91.1");
+    assert!(unlimited["asn"].get("type").is_none(), "the stub is Unlimited's");
+    let stub = Stub::start([
+        ("/66.249.66.1".to_owned(), Route::ok(paid.to_string())),
+        ("/45.83.91.1".to_owned(), Route::ok(unlimited.to_string())),
+        ("/myip".to_owned(), Route::ok(unlimited.to_string())),
+        ("/8.8.4.4".to_owned(), Route::ok(answer("8.8.4.4"))),
+    ])
+    .await;
+    let client = stub.client().retries(0).build().expect("build");
+
+    let served = client.lookup("66.249.66.1").await.expect("lookup");
+    assert_eq!(served.asn.r#type, "hosting", "a served type reads as served");
+    let lookup = client.lookup("45.83.91.1").await.expect("an answer without the type");
+    assert_eq!(lookup.asn.r#type, "", "an absent type reads empty");
+    assert_eq!(lookup.asn.name, "M247 Europe SRL", "the rest of the AS reads as served");
+    let myip = client.my_ip().await.expect("my_ip without the type");
+    assert_eq!(myip.asn.r#type, "", "my_ip reads it empty");
+    let again = client.lookup("45.83.91.1").await.expect("from the cache");
+    assert_eq!(again.asn.r#type, "", "a cached answer reads it empty");
+
+    let mut batch =
+        client.lookup_batch(["66.249.66.1", "8.8.4.4"], BatchOptions::new().concurrency(1)).await;
+    let paid = batch.swap_remove("66.249.66.1").expect("answered").expect("a batch entry");
+    assert_eq!(paid.asn.r#type, "hosting", "a batch entry that serves it");
+    let plain = batch.swap_remove("8.8.4.4").expect("answered").expect("a batch entry");
+    assert_eq!(plain.asn.r#type, "", "a batch entry without it");
+}
+
+/// A network type the wire does serve is read as strictly as it was when the
+/// spec required it: no number, boolean, list, object or null stands in for the
+/// string.
+#[tokio::test]
+async fn a_network_type_that_is_no_string_is_a_retried_server_error() {
+    let wrong = [
+        ("a number", serde_json::json!(1)),
+        ("a boolean", serde_json::json!(true)),
+        ("a list", serde_json::json!(["hosting"])),
+        ("an object", serde_json::json!({})),
+        ("null", serde_json::Value::Null),
+    ];
+    for (kind, value) in wrong {
+        let mut body = answer_value("9.9.9.9");
+        body["asn"]["type"] = value;
+        let stub = Stub::start([("/9.9.9.9".to_owned(), Route::ok(body.to_string()))]).await;
+        let client = stub.client().no_cache().retries(0).build().expect("build");
+
+        let err = client.lookup("9.9.9.9").await.expect_err("an unreadable type");
+
+        assert_eq!(err.kind(), ErrorKind::ServerError, "{kind}: {err}");
+        assert_eq!(err.status(), Some(200), "{kind}: the status");
+
+        let results = serde_json::json!({ "9.9.9.9": body, "8.8.4.4": answer_value("8.8.4.4") });
+        let batch = serde_json::json!({ "results": results, "errors": {} });
+        let stub = Stub::start([]).await;
+        stub.sequence("/batch", [Route::ok(batch.to_string())]);
+        let client = stub.client().retries(0).build().expect("build");
+
+        let mut answers = client.lookup_batch(["9.9.9.9", "8.8.4.4"], BatchOptions::new()).await;
+
+        let Err(err) = answers.swap_remove("9.9.9.9").expect("answered") else {
+            panic!("{kind}: a batch entry read as an answer")
+        };
+        assert_eq!(err.kind(), ErrorKind::ServerError, "{kind}: {err}");
+        answers.swap_remove("8.8.4.4").expect("answered").expect("the other entry");
+    }
+}
+
 /// A 2xx a call cannot read is no answer: the server_error an outage is,
 /// carrying the status, and retried like one.
 #[tokio::test]

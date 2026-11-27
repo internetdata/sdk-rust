@@ -88,6 +88,11 @@ mkdir -p .gen/spec
 # out defaults to false below, while a served one that is no boolean still
 # fails the call. src/lookup.rs keeps which ones the wire left out, for the
 # middleware. The next major types them `Option<bool>`.
+#
+# The AS's `type` (spec 2026.11.26: Unlimited no longer serves it) stays the
+# plain String it has been the same way: required again for the generator, and
+# one the wire leaves out reads "" below, while a served one that is no string
+# still fails the call. The next major types it `Option<String>`.
 HELD_FLAGS="is_bot is_carrier is_satellite is_ssh is_smtp is_web is_dns_resolver is_bittorrent"
 export HELD_FLAGS
 
@@ -114,8 +119,13 @@ perl -0777 -pe '
         }
         $head . $list;
     }se or die "LookupResponse has no required list to hold the flags in\n";
-    s{(\n    Asn:\n.*?\n      required:\n(?: {8}- \w+\n)*?) {8}- country\n {8}- rpki_status\n}{$1}s
-        or die "the AS no longer requires country and rpki_status\n";
+    s{(\n    Asn:\n.*?\n      required:\n(?: {8}- \w+\n)*?) {8}- country\n {8}- rpki_status\n}{
+        my $list = $1;
+        die "the spec requires the AS type again: stop holding it\n" if $list =~ /^ {8}- type$/m;
+        $list =~ s/^( {8}- domain\n)/$1        - type\n/m
+            or die "the AS requires no domain to hold its type after\n";
+        $list;
+    }se or die "the AS no longer requires country and rpki_status\n";
     for my $day (split " ", $ENV{SEEN_DAYS}) {
         my ($schema, $member) = split /\./, $day;
         s{(\n    \Q$schema\E:\n(?: {6}.*\n|\n)*? {8}\Q$member\E:\n {10}type: string\n) {10}format: date\n}{$1}
@@ -167,6 +177,13 @@ for member in $HELD_FLAGS; do
             or die "LookupResponse.$m is no plain bool member: teach this script its shape\n";
     ' src/generated/models/lookup_response.rs
 done
+
+# The held AS type the wire leaves out reads "". A member that the generator
+# stops emitting as a plain `String` stops the script.
+perl -0777 -pi -e '
+    s/(#\[serde\(rename = "type")(\)\]\s+pub r#type: String,)/$1, default$2/
+        or die "Asn.type is no plain String member: teach this script its shape\n";
+' src/generated/models/asn.rs
 
 # Every date member reads through src/dates.rs, which takes only the form the
 # spec's `format` names: chrono's own serde reader is a relaxed one, and took
