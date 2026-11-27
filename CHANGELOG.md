@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.7.0 - 2026-11-27
+
+### Fixes
+
+- Read a keyless answer without the network's type ([`8f75926`](https://github.com/internetdata/sdk-rust/commit/8f759269e8eb8d2d68cc30bbefc7d3b2099af73a))
+
 ## 3.6.0 - 2026-11-26
 
 ### Fixes
