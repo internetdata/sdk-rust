@@ -2,6 +2,18 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff. Releases before 2.2.2 are described by their release commits.
 
+## 3.8.0 - 2026-11-28
+
+### Features
+
+- Middleware: allow_bots sends only a crawler's User-Agent, at most four an address ([`7ac82d6`](https://github.com/internetdata/sdk-rust/commit/7ac82d64c9b446de62a1d1afbc0ef1357c484ea0))
+
+### Fixes
+
+- Spec 2026.11.27: the free plan's trial is a window, not a month ([`5bf4bf0`](https://github.com/internetdata/sdk-rust/commit/5bf4bf08bff5cb885cfd41322dd1b72b34762dc6))
+- Middleware: a condition on the verdict is no plan gap for a request that sent no agent ([`967ddea`](https://github.com/internetdata/sdk-rust/commit/967ddea67042821e6ec5da5def6f5a70103d45ec))
+- Middleware: a bogon's answer reports no missing member ([`52964d6`](https://github.com/internetdata/sdk-rust/commit/52964d6f598b454708a0ec12ee7d3905a4675e3d))
+
 ## 3.7.0 - 2026-11-27
 
 ### Fixes
