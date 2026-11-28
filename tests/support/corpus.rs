@@ -30,6 +30,8 @@ pub struct Corpus {
     pub visibility: Visibility,
     pub oauth: Oauth,
     pub middleware: Middleware,
+    #[serde(rename = "crawlerAgents")]
+    pub crawler_agents: CrawlerAgents,
 }
 
 impl Corpus {
@@ -39,6 +41,17 @@ impl Corpus {
             .find(|c| c.name == name)
             .unwrap_or_else(|| panic!("the corpus has no batch case named {name:?}"))
     }
+}
+
+/// The crawler terms an `allow_bots` middleware matches an agent against, and
+/// the agents that must and must not match. A key this suite does not know fails
+/// to parse.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CrawlerAgents {
+    pub terms: Vec<String>,
+    pub crawlers: Vec<String>,
+    pub others: Vec<String>,
 }
 
 /// What a bogon is answered with, before its address is filled in.
