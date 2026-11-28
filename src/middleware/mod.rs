@@ -356,7 +356,11 @@ impl Core {
                 // A request that sent no agent has no verdict to lack, whatever the plan serves.
                 let unsent: &[&str] =
                     if self.agents.is_some() && agent.is_none() { &["user_agent"] } else { &[] };
-                self.report_missing(condition, &answer, unsent)?;
+                // A bogon is answered locally in the widest shape, with no verdict, which no
+                // plan explains.
+                if !result.is_bogon {
+                    self.report_missing(condition, &answer, unsent)?;
+                }
                 condition::matches(condition, &answer)
             }
         };

@@ -329,3 +329,30 @@ async fn a_condition_on_the_verdict_is_no_plan_gap_for_a_request_that_sent_no_ag
     assert_eq!(seen.len(), 1, "{seen:?}");
     assert!(seen[0].contains("user_agent"), "{}", seen[0]);
 }
+
+/// A bogon peer, local development behind no proxy, is answered locally in the
+/// widest shape and carries no verdict, and that is no plan gap: `Fail` used to
+/// refuse a crawler's request there.
+#[tokio::test]
+async fn a_bogon_peer_with_a_crawler_agent_is_no_plan_gap() {
+    for peer in ["127.0.0.1", "10.0.0.1", "::1"] {
+        for action in [OnMissingField::Fail, OnMissingField::Warn] {
+            let stub = Stub::start([]).await;
+            let (seen, warn) = warnings();
+            let options = Options::new().allow_bots(true).on_missing_field(action).on_warn(warn);
+            let found = evaluate_from(&forged_core(&stub, options), peer, Some(GOOGLEBOT))
+                .await
+                .unwrap_or_else(|error| {
+                    panic!("{peer}, {action:?}: a plan gap for a bogon: {error}")
+                });
+            assert!(!found.blocked, "{peer}, {action:?}");
+            assert!(found.result.expect("a result").is_bogon, "{peer}, {action:?}");
+            assert_eq!(stub.count(), 0, "{peer}, {action:?}: a bogon reached the origin");
+            let seen = seen.lock().unwrap();
+            assert!(
+                seen.iter().all(|message| !message.contains("does not include")),
+                "{peer}, {action:?}: warned of a plan gap: {seen:?}"
+            );
+        }
+    }
+}
