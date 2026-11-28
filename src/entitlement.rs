@@ -65,10 +65,12 @@ pub struct EntitlementUsage {
     /// below this, requests are served and billed as overage.
     #[serde(deserialize_with = "Option::deserialize")]
     pub hard_limit: Option<i64>,
-    /// When the current allowance period began.
+    /// When the current allowance period began. On the free plan, when its
+    /// trial began, or now before a first lookup starts it.
     #[serde(deserialize_with = "crate::dates::date_time")]
     pub window_start: chrono::DateTime<chrono::FixedOffset>,
-    /// When the allowance next resets.
+    /// When the allowance next resets. On the free plan, when its trial ends,
+    /// which it does once.
     #[serde(deserialize_with = "crate::dates::date_time")]
     pub window_end: chrono::DateTime<chrono::FixedOffset>,
 }

@@ -110,7 +110,7 @@ let acct = client.my_entitlement().await?;
 println!("{}", acct.plan.key);            // free
 println!("{}", acct.plan.name);           // Unlimited, the name to show
 println!("{}", acct.usage.requests);      // 42
-println!("{}", acct.usage.window_end);    // when the allowance resets
+println!("{}", acct.usage.window_end);    // when the allowance resets, or the trial ends
 ```
 
 Usage counts against the anniversary of your subscription on a paid plan, not the calendar month and not the billing period, and against its trial on the free plan; it is the same number a lookup is gated on. `hard_limit` is `None` on an uncapped plan, which is not the same as zero.
